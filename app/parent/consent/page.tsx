@@ -102,6 +102,16 @@ export default function ParentConsentPage() {
         setResponses(all);
     };
 
+    const handleDisagreeAll = () => {
+        const all: Record<string, ConsentResponse> = {};
+        const reg = Array.isArray(classConfig?.registrySoftwares) ? classConfig.registrySoftwares : [];
+        const sel = Array.isArray(classConfig?.selectedSoftwares) ? classConfig.selectedSoftwares : [];
+        (reg.length > 0 ? reg : sel).forEach(sw => {
+            all[sw.id] = { agree: true, collectionUse: false, thirdParty: false };
+        });
+        setResponses(all);
+    };
+
     const generateCode = () => {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude ambiguous chars like 0, O, 1, I, S, 5
         let res = '';
@@ -337,14 +347,17 @@ export default function ParentConsentPage() {
                     })}
                 </div>
 
-                {/* Bulk agree Move to Bottom */}
+                {/* Bulk actions */}
                 <div className="card" style={{ marginTop: 20 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                        <div style={{ flex: 1 }}>
-                            <p style={{ fontWeight: 700 }}>전체 일괄 동의</p>
-                            <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginTop: 2 }}>위 항목들을 모두 동의하시겠습니까?</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                            <p style={{ fontWeight: 700 }}>전체 일괄 선택</p>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginTop: 2 }}>모든 항목을 한 번에 동의 또는 비동의로 설정합니다.</p>
                         </div>
-                        <button className="btn btn-success" onClick={handleAgreeAll}>✅ 전체 일괄 동의</button>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button className="btn btn-success" onClick={handleAgreeAll} style={{ fontSize: '0.88rem' }}>✅ 전체 일괄 동의</button>
+                            <button className="btn btn-danger" onClick={handleDisagreeAll} style={{ fontSize: '0.88rem' }}>❌ 전체 일괄 비동의</button>
+                        </div>
                     </div>
                 </div>
 
