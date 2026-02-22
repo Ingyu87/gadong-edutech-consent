@@ -81,7 +81,10 @@ export default function TeacherPage() {
         } catch (e) { console.error(e); }
     };
 
-    const isSmcApproved = (sw: SoftwareItem) => smcList.some(s => s.softwareName.trim() === sw.name.trim());
+    const isSmcApproved = (sw: SoftwareItem) => {
+        if (!sw.name) return false;
+        return smcList.some(s => s.softwareName.trim().toLowerCase() === sw.name.trim().toLowerCase());
+    };
 
     const maskName = (name: string) => {
         if (!name || name.length < 2) return name;

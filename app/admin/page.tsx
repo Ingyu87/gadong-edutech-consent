@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, Fragment } from 'react';
+import { useEffect, useState, useRef, useMemo, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { getClasses, getConsents, getSmcRecords, addSmcRecord, deleteSmcRecord, upsertClass } from '@/lib/db';
 import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
@@ -33,6 +33,21 @@ export default function AdminPage() {
     const [classConsentsLoading, setClassConsentsLoading] = useState(false);
     const [showTop, setShowTop] = useState(false);
     const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
+
+    const pendingSw = useMemo(() => {
+        const pendingMap = new Map<string, SoftwareItem>();
+        classes.forEach(cls => {
+            const swList = cls.registrySoftwares || cls.selectedSoftwares || [];
+            swList.forEach(sw => {
+                const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
+                if (!approved) {
+                    const key = sw.name.trim().toLowerCase();
+                    if (!pendingMap.has(key)) pendingMap.set(key, sw);
+                }
+            });
+        });
+        return Array.from(pendingMap.values());
+    }, [classes, smcList]);
 
     const normalizeResp = (r: ConsentRecord['responses'][string]): ConsentResponse => {
         if (r == null) return { agree: null, collectionUse: null, thirdParty: null };
@@ -75,8 +90,10 @@ export default function AdminPage() {
         setClassConsentsLoading(false);
     };
 
-    const smcMatch = (smcName: string, swName: string) =>
-        smcName.trim().toLowerCase() === swName.trim().toLowerCase();
+    const smcMatch = (smcName: string, swName: string) => {
+        if (!smcName || !swName) return false;
+        return smcName.trim().toLowerCase() === swName.trim().toLowerCase();
+    };
 
     const maskName = (name: string) => {
         if (!name || name.length < 2) return name;
@@ -207,6 +224,80 @@ export default function AdminPage() {
         alert('학급이 삭제되었습니다.');
     };
 
+    // ---- Management of Class Softwares (Teacher-like features for Admin) ----
+    const handleClassCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const parseFile = (encoding: string) => {
+            Papa.parse(file, {
+                header: true, skipEmptyLines: true, encoding: encoding,
+                transformHeader: (h) => h.trim().replace(/^\uFEFF/, '').replace(/\r?\n/g, '').trim(),
+                complete: (result) => {
+                    const rows = result.data as Record<string, string>[];
+                    const items: SoftwareItem[] = rows.filter(r => {
+                        const keys = Object.keys(r);
+                        return keys.some(k => (k.includes('명') || k.toLowerCase().includes('name')) && r[k]);
+                    }).map((r, i) => {
+                        const keys = Object.keys(r);
+                        const nameKey = keys.find(k => k.includes('명') || k.toLowerCase().includes('name')) || '';
+                        const ageKey = keys.find(k => k.includes('연령') || k.toLowerCase().includes('age')) || '';
+                        const urlKey = keys.find(k => k.includes('주소') || k.toLowerCase().includes('url')) || '';
+                        const privacyKey = keys.find(k => k.includes('약관') || k.includes('방침') || k.toLowerCase().includes('privacy')) || '';
+                        const collKey = keys.find(k => k.includes('수집') && k.includes('이용')) || keys.find(k => k.includes('수집이용')) || '';
+                        const thirdKey = keys.find(k => k.includes('제3자') && k.includes('제공')) || keys.find(k => k.includes('제3자제공')) || '';
+
+                        return {
+                            id: `admin_csv_${i}_${Date.now()}`,
+                            name: (r[nameKey] || '').trim(),
+                            ageRange: (r[ageKey] || '').trim(),
+                            url: (r[urlKey] || '').trim(),
+                            privacyUrl: (r[privacyKey] || '').trim(),
+                            collectionUseConsent: (r[collKey] || '').trim() || undefined,
+                            thirdPartyConsent: (r[thirdKey] || '').trim() || undefined,
+                        };
+                    });
+
+                    if (items.length > 0) {
+                        handleBatchAddSoftwares(items);
+                    } else if (encoding === 'UTF-8') {
+                        parseFile('EUC-KR');
+                    } else {
+                        alert('CSV 파일에서 유효한 목록을 찾을 수 없습니다.');
+                    }
+                }
+            });
+        };
+        parseFile('UTF-8');
+    };
+
+    const handleBatchAddSoftwares = async (newItems: SoftwareItem[]) => {
+        if (!selectedClass) return;
+        const current = selectedClass.registrySoftwares || [];
+        const merged = [...current, ...newItems];
+        // Automatically select all
+        const updated = {
+            ...selectedClass,
+            registrySoftwares: merged,
+            selectedSoftwares: merged.map(s => ({ ...s, isSmcApproved: smcList.some(sm => smcMatch(sm.softwareName, s.name)) })),
+            isActive: true
+        };
+        await upsertClass(updated, selectedClass.id);
+        setSelectedClass(updated);
+        setClasses(prev => prev.map(c => c.id === selectedClass.id ? updated : c));
+        alert(`${newItems.length}개 에듀테크가 해당 학급에 성공적으로 등록되었습니다.`);
+    };
+
+    const handleDeleteSoftware = async (swId: string) => {
+        if (!selectedClass || !confirm('이 에듀테크를 학급 목록에서 삭제하시겠습니까?')) return;
+        const newRegistry = (selectedClass.registrySoftwares || []).filter(s => s.id !== swId);
+        const newSelected = (selectedClass.selectedSoftwares || []).filter(s => s.id !== swId);
+        const updated = { ...selectedClass, registrySoftwares: newRegistry, selectedSoftwares: newSelected };
+        await upsertClass(updated, selectedClass.id);
+        setSelectedClass(updated);
+        setClasses(prev => prev.map(c => c.id === selectedClass.id ? updated : c));
+    };
+
     const logout = () => { sessionStorage.removeItem('adminAuth'); router.push('/role'); };
 
     return (
@@ -251,7 +342,7 @@ export default function AdminPage() {
                                                                 <td>{cls.year}학년</td><td>{cls.classNum}반</td><td>{maskName(cls.teacherName)}</td>
                                                                 <td>{cls.isActive ? <span className="badge badge-smc">✅ 활성</span> : <span className="badge badge-no-smc">미설정</span>}</td>
                                                                 <td>{(cls.registrySoftwares || cls.selectedSoftwares || []).length}개</td>
-                                                                <td>{nonSmc.length > 0 ? <span className="badge badge-no-smc">⚠️ {nonSmc.map(s => s.name).join(', ')}</span> : <span className="badge badge-smc">없음</span>}</td>
+                                                                <td>{nonSmc.length > 0 ? <span className="badge badge-no-smc">⚠️ 미승인 {nonSmc.length}개</span> : <span className="badge badge-smc">✅ 전체 승인됨</span>}</td>
                                                             </tr>
                                                         );
                                                     })}
@@ -369,7 +460,7 @@ export default function AdminPage() {
                                                                                                                 <span>{r.thirdParty === true ? '✅' : r.thirdParty === false ? '❌' : '—'} 제3자제공</span>
                                                                                                             </div>
                                                                                                         </div>
-                                                                    );
+                                                                                                    );
                                                                                                 })}
                                                                                             </div>
                                                                                         </div>
@@ -394,11 +485,18 @@ export default function AdminPage() {
                                                 <>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                                         <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 0 }}>📱 에듀테크 목록 ({swList.length}개)</p>
-                                                        {hasPending && (
-                                                            <button className="btn btn-primary btn-sm" onClick={() => handleApproveAll(swList)}>
-                                                                🚀 미승인 항목 일괄 승인
-                                                            </button>
-                                                        )}
+                                                        <div style={{ display: 'flex', gap: 8 }}>
+                                                            <div style={{ position: 'relative' }}>
+                                                                <button className="btn btn-outline btn-sm">📁 SW 목록 업로드(CSV)</button>
+                                                                <input type="file" accept=".csv" onChange={handleClassCsvUpload}
+                                                                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                                                            </div>
+                                                            {hasPending && (
+                                                                <button className="btn btn-primary btn-sm" onClick={() => handleApproveAll(swList)}>
+                                                                    🚀 미승인 항목 일괄 승인
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     {swList.length === 0 ? (
                                                         <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>등록된 소프트웨어 없음</p>
@@ -414,6 +512,8 @@ export default function AdminPage() {
                                                                             <div style={{ display: 'flex', gap: 10 }}>
                                                                                 {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>사이트 ↗</a>}
                                                                                 {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a>}
+                                                                                <button className="btn btn-ghost btn-sm" style={{ height: 26, padding: '0 4px', fontSize: '0.75rem', color: 'var(--danger)' }}
+                                                                                    onClick={() => handleDeleteSoftware(sw.id)}>🗑️ 삭제</button>
                                                                                 {!approved && (
                                                                                     <button className="btn btn-primary btn-sm"
                                                                                         style={{ height: 26, padding: '0 8px', fontSize: '0.75rem' }}
@@ -455,6 +555,33 @@ export default function AdminPage() {
                         {/* SMC */}
                         {tab === 'smc' && (
                             <div>
+                                {/* Centralized Pending Approvals */}
+                                {pendingSw.length > 0 && (
+                                    <div className="card" style={{ marginBottom: 16, border: '1.5px solid var(--warning)', background: '#fffcf5' }}>
+                                        <p className="card-title" style={{ color: 'var(--warning)', marginBottom: 8 }}>🚀 학교 전체 승인 대기 목록 ({pendingSw.length}개)</p>
+                                        <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginBottom: 14 }}>
+                                            학교 내 여러 학급에서 사용 중이나 아직 심의 승인되지 않은 항목들입니다. 여기서 승인하면 학교 전체에 즉시 적용됩니다.
+                                        </p>
+                                        <div className="table-wrapper">
+                                            <table style={{ background: 'white' }}>
+                                                <thead><tr><th>소프트웨어명</th><th style={{ textAlign: 'right' }}>관리</th></tr></thead>
+                                                <tbody>
+                                                    {pendingSw.map((sw: SoftwareItem) => (
+                                                        <tr key={sw.id}>
+                                                            <td style={{ fontWeight: 600 }}>{sw.name}</td>
+                                                            <td style={{ textAlign: 'right' }}>
+                                                                <button className="btn btn-primary btn-sm" onClick={() => handleManualApprove(sw.name)}>
+                                                                    심의 승인 처리
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* PDF OCR */}
                                 <div className="card" style={{ marginBottom: 16 }}>
                                     <p className="card-title">📄 학운위 심의안 PDF 업로드 (제품명 자동 추출)</p>
