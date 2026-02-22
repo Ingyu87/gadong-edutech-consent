@@ -136,6 +136,20 @@ export default function ParentLoginInner() {
                         {step === 'info' && (
                             <div className="card" style={{ marginTop: 32 }}>
                                 <p className="card-title" style={{ justifyContent: 'center' }}>👨‍👩‍👧 정보 입력</p>
+
+                                {/* Global Privacy Notice (PIPA Compliance) */}
+                                <div className="alert alert-info" style={{ marginBottom: 20, fontSize: '0.82rem', display: 'block' }}>
+                                    <p style={{ fontWeight: 700, marginBottom: 8, fontSize: '0.9rem', borderBottom: '1px solid rgba(30, 58, 138, 0.2)', paddingBottom: 4 }}>
+                                        ⚖️ 개인정보 수집 및 이용 안내
+                                    </p>
+                                    <ul style={{ paddingLeft: 18, listStyleType: 'disc', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <li><strong>목적</strong>: 학급 에듀테크 활용을 위한 사전 동의 현황 파악 및 확인 코드 생성</li>
+                                        <li><strong>항목</strong>: 학생 이름, 학번, 학부모 이름, 설정 비밀번호(4자리)</li>
+                                        <li><strong>보유 기간</strong>: 당해 학년도 종료 시(또는 목적 달성 시) 즉시 파기</li>
+                                        <li><strong>거부권</strong>: 본 동의를 거부할 수 있으나, 거부 시 확인 코드 생성이 불가하여 종이 서면 제출 시 처리가 지연될 수 있습니다.</li>
+                                    </ul>
+                                </div>
+
                                 <form onSubmit={handleSubmit}>
                                     <div style={{ display: 'flex', gap: 10 }}>
                                         <div className="form-group" style={{ flex: 1 }}>
