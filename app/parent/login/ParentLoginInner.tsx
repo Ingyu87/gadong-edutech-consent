@@ -140,19 +140,19 @@ export default function ParentLoginInner() {
                                     <div style={{ display: 'flex', gap: 10 }}>
                                         <div className="form-group" style={{ flex: 1 }}>
                                             <label className="form-label">번호 <span className="form-required">*</span></label>
-                                            <select className="form-control form-select" value={form.number} onChange={set('number')} required>
+                                            <select className="form-control form-select" style={{ height: 48 }} value={form.number} onChange={set('number')} required>
                                                 <option value="">선택</option>
                                                 {Array.from({ length: 35 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}번</option>)}
                                             </select>
                                         </div>
                                         <div className="form-group" style={{ flex: 2 }}>
                                             <label className="form-label">학생 이름 <span className="form-required">*</span></label>
-                                            <input className="form-control" placeholder="홍길동" value={form.studentName} onChange={set('studentName')} required />
+                                            <input className="form-control" style={{ height: 48 }} placeholder="홍길동" value={form.studentName} onChange={set('studentName')} required />
                                         </div>
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">학부모 이름 <span className="form-required">*</span></label>
-                                        <input className="form-control" placeholder="홍부모" value={form.parentName} onChange={set('parentName')} required />
+                                        <input className="form-control" style={{ height: 48 }} placeholder="홍부모" value={form.parentName} onChange={set('parentName')} required />
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">비밀번호 4자리 설정 <span className="form-required">*</span></label>
@@ -160,6 +160,7 @@ export default function ParentLoginInner() {
                                             {[0, 1, 2, 3].map(i => (
                                                 <input key={i} id={`pin-p-${i}`} className="pin-digit" type="password"
                                                     maxLength={1} inputMode="numeric" value={form.pin[i] || ''}
+                                                    style={{ width: 60, height: 70, fontSize: '1.8rem' }}
                                                     onChange={e => {
                                                         const val = e.target.value.replace(/\D/g, '');
                                                         const arr = form.pin.split('');
@@ -173,7 +174,7 @@ export default function ParentLoginInner() {
                                         <p className="form-hint" style={{ textAlign: 'center' }}>나중에 수정할 때 필요합니다.</p>
                                     </div>
                                     {error && <div className="alert alert-danger">{error}</div>}
-                                    <button type="submit" className="btn btn-primary btn-block btn-lg">동의서 작성하기</button>
+                                    <button type="submit" className="btn btn-primary btn-block btn-lg" style={{ height: 56, fontSize: '1.1rem' }}>동의서 작성하기</button>
                                 </form>
                             </div>
                         )}

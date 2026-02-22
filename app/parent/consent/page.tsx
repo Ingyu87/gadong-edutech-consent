@@ -183,6 +183,14 @@ export default function ParentConsentPage() {
                 <span className="header-mode-badge badge-parent">학부모</span>
             </header>
             <main className="main-content" style={{ maxWidth: 720 }}>
+                {/* Progress Bar */}
+                <div style={{ position: 'sticky', top: 60, zIndex: 90, background: 'var(--gray-50)', padding: '12px 0 20px', margin: '0 -4px' }}>
+                    <div className="progress-bar-wrap" style={{ position: 'relative' }}>
+                        <div className="progress-bar" style={{ width: `${(answeredCount / (totalCount || 1)) * 100}%` }} />
+                        <span className="progress-text">{answeredCount} / {totalCount} 완료</span>
+                    </div>
+                </div>
+
                 {/* Info */}
                 <div className="card" style={{ marginBottom: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -198,101 +206,74 @@ export default function ParentConsentPage() {
                     </div>
                 </div>
 
-                {/* Offline notice */}
-                <div className="alert alert-warning" style={{ marginBottom: 14 }}>
-                    <span>📝</span>
-                    <span>이 페이지는 사전 조사용입니다. <strong>최종 서명은 반드시 종이 통신문에 작성</strong>하여 제출해 주세요.</span>
-                </div>
-
                 {classConfig.teacherNote && (
                     <div className="alert alert-info" style={{ marginBottom: 14 }}>
                         <span>💬</span><span>{classConfig.teacherNote}</span>
                     </div>
                 )}
 
-                {/* Bulk agree */}
-                <div className="card" style={{ marginBottom: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                        <div style={{ flex: 1 }}>
-                            <p style={{ fontWeight: 700 }}>전체 동의</p>
-                            <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginTop: 2 }}>전체 {totalCount}개 소프트웨어 모두 동의</p>
-                        </div>
-                        <button className="btn btn-success" onClick={handleAgreeAll}>✅ 전체 일괄 동의</button>
-                    </div>
-                </div>
-
                 <div className="alert alert-info" style={{ marginBottom: 14, fontSize: '0.82rem', lineHeight: '1.5' }}>
                     <span>⚖️</span>
                     <span>법적으로 규정된 목적(학교생활기록부 및 건강기록부 작성 등) 이외의 수집 항목들에 대한 정보 이용 동의를 거부할 권리가 있음을 알려드리며 아울러 거부 시 해당 항목의 서비스가 제공되지 않는 제한 사항이 있을 수 있습니다.</span>
                 </div>
 
-                {/* Individual consent (Table style) */}
-                <div className="card" style={{ padding: '20px 0' }}>
-                    <p className="card-title" style={{ padding: '0 20px', marginBottom: 20 }}>📋 에듀테크별 개별 동의</p>
-                    <div className="table-wrapper">
-                        <table style={{ borderTop: '1px solid var(--gray-200)' }}>
-                            <thead>
-                                <tr>
-                                    <th style={{ paddingLeft: 20 }}>에듀테크명</th>
-                                    <th>심의여부</th>
-                                    <th>사용연령</th>
-                                    <th>링크</th>
-                                    <th style={{ textAlign: 'center', paddingRight: 20 }}>동의 선택</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(classConfig.registrySoftwares || classConfig.selectedSoftwares || []).map((sw: SoftwareItem) => {
-                                    const resp = responses[sw.id];
-                                    const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
-                                    return (
-                                        <tr key={sw.id}>
-                                            <td style={{ paddingLeft: 20, verticalAlign: 'middle' }}>
-                                                <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{sw.name}</div>
-                                            </td>
-                                            <td style={{ verticalAlign: 'middle' }}>
-                                                {approved ? (
-                                                    <span className="badge badge-smc">✅ 심의완료</span>
-                                                ) : (
-                                                    <span className="badge badge-no-smc">⚠️ 심의 확인</span>
-                                                )}
-                                            </td>
-                                            <td style={{ verticalAlign: 'middle', fontSize: '0.82rem', color: 'var(--gray-600)' }}>
-                                                {sw.ageRange || '-'}
-                                            </td>
-                                            <td style={{ verticalAlign: 'middle' }}>
-                                                <div style={{ display: 'flex', gap: 10 }}>
-                                                    {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" className="consent-link">사이트 ↗</a>}
-                                                    {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" className="consent-link">약관 ↗</a>}
-                                                </div>
-                                            </td>
-                                            <td style={{ paddingRight: 20, textAlign: 'center', verticalAlign: 'middle' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
-                                                    <button
-                                                        className={`consent-btn ${resp === true ? 'active' : ''}`}
-                                                        style={{
-                                                            padding: '4px 12px', fontSize: '0.78rem',
-                                                            borderColor: resp === true ? 'var(--success)' : 'var(--gray-300)',
-                                                            color: resp === true ? 'var(--white)' : 'var(--gray-400)',
-                                                            background: resp === true ? 'var(--success)' : 'transparent'
-                                                        }}
-                                                        onClick={() => handleAgree(sw.id, true)}>동의</button>
-                                                    <button
-                                                        className={`consent-btn ${resp === false ? 'active' : ''}`}
-                                                        style={{
-                                                            padding: '4px 10px', fontSize: '0.78rem',
-                                                            borderColor: resp === false ? 'var(--danger)' : 'var(--gray-300)',
-                                                            color: resp === false ? 'var(--white)' : 'var(--gray-400)',
-                                                            background: resp === false ? 'var(--danger)' : 'transparent'
-                                                        }}
-                                                        onClick={() => handleAgree(sw.id, false)}>비동의</button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                {/* Individual consent (Mobile Cards) */}
+                <div className="consent-list-container">
+                    {(classConfig.registrySoftwares || classConfig.selectedSoftwares || []).map((sw: SoftwareItem) => {
+                        const resp = responses[sw.id];
+                        const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
+                        return (
+                            <div key={sw.id} className="consent-card">
+                                <div className="consent-card-header">
+                                    <div className="consent-card-title">{sw.name}</div>
+                                    {approved ? (
+                                        <span className="badge badge-smc">✅ 심의완료</span>
+                                    ) : (
+                                        <span className="badge badge-no-smc">⚠️ 심의 확인</span>
+                                    )}
+                                </div>
+                                <div className="consent-card-body">
+                                    <div className="consent-card-meta">
+                                        <span>연령: {sw.ageRange || '정보 없음'}</span>
+                                        <div className="consent-card-links">
+                                            {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" className="consent-link">사이트 ↗</a>}
+                                            {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" className="consent-link">약관 ↗</a>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="consent-card-footer">
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: resp === null ? 'var(--gray-400)' : resp ? 'var(--success)' : 'var(--danger)' }}>
+                                        {resp === true ? '동의함' : resp === false ? '동의하지 않음' : '대기 중...'}
+                                    </span>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button
+                                            className={`consent-btn ${resp === true ? 'active' : ''}`}
+                                            onClick={() => handleAgree(sw.id, true)}>동의</button>
+                                        <button
+                                            className={`consent-btn ${resp === false ? 'active' : ''}`}
+                                            onClick={() => handleAgree(sw.id, false)}>비동의</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Bulk agree Move to Bottom */}
+                <div className="card" style={{ marginTop: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                        <div style={{ flex: 1 }}>
+                            <p style={{ fontWeight: 700 }}>전체 일괄 동의</p>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginTop: 2 }}>위 항목들을 모두 동의하시겠습니까?</p>
+                        </div>
+                        <button className="btn btn-success" onClick={handleAgreeAll}>✅ 전체 일괄 동의</button>
                     </div>
+                </div>
+
+                {/* Offline notice Move to Bottom */}
+                <div className="alert alert-warning" style={{ marginTop: 20 }}>
+                    <span>📝</span>
+                    <span><strong>최종 서명은 반드시 종이 통신문에 작성</strong>하여 제출해 주세요. (확인 코드가 생성됩니다)</span>
                 </div>
 
                 {/* Submit */}

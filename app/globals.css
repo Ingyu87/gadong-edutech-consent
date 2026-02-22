@@ -618,6 +618,78 @@ tr:hover td {
   transition: width 0.3s;
 }
 
+.progress-text {
+  position: absolute;
+  right: 0;
+  top: -20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* ===== Consent Mobile Cards ===== */
+.consent-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.consent-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s;
+}
+
+.consent-card:hover {
+  border-color: var(--primary);
+}
+
+.consent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.consent-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.consent-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gray-100);
+}
+
+.consent-card-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--gray-900);
+}
+
+.consent-card-meta {
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.consent-card-links {
+  display: flex;
+  gap: 12px;
+}
+
 /* ===== Loading Spinner ===== */
 .spinner {
   width: 24px;
