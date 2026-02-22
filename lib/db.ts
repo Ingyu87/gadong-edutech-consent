@@ -21,10 +21,11 @@ export async function getSchools(): Promise<School[]> {
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as School));
 }
 
-export async function createSchool(name: string, password: string): Promise<string> {
+export async function createSchool(name: string, password: string, accessCode: string = '2026'): Promise<string> {
     const ref = await addDoc(collection(db, 'schools'), {
         name,
         adminPassword: password,
+        accessCode: accessCode,
         createdAt: serverTimestamp(),
     });
     return ref.id;
@@ -39,6 +40,12 @@ export async function getSchool(schoolId: string): Promise<School | null> {
 export async function updateSchoolPassword(schoolId: string, password: string): Promise<void> {
     await updateDoc(doc(db, 'schools', schoolId), {
         adminPassword: password,
+    });
+}
+
+export async function updateSchoolAccessCode(schoolId: string, code: string): Promise<void> {
+    await updateDoc(doc(db, 'schools', schoolId), {
+        accessCode: code,
     });
 }
 

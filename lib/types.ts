@@ -4,6 +4,7 @@ export interface School {
     id: string;
     name: string;
     adminPassword: string;
+    accessCode: string;
     createdAt: Date;
 }
 

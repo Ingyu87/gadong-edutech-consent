@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
-import { getClasses, getConsents, getSmcRecords, addSmcRecord, deleteSmcRecord, upsertClass, updateSchoolPassword } from '@/lib/db';
+import { getClasses, getConsents, getSmcRecords, addSmcRecord, deleteSmcRecord, upsertClass, updateSchoolPassword, updateSchoolAccessCode } from '@/lib/db';
 import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
 import { storage, db } from '@/lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -40,6 +40,8 @@ export default function AdminPage() {
     const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
     const [isEditingPw, setIsEditingPw] = useState(false);
     const [newPw, setNewPw] = useState('');
+    const [isEditingCode, setIsEditingCode] = useState(false);
+    const [newCode, setNewCode] = useState('');
 
     const pendingSw = useMemo(() => {
         const pendingMap = new Map<string, SoftwareItem>();
@@ -317,6 +319,19 @@ export default function AdminPage() {
         }
     };
 
+    const handleUpdateCode = async () => {
+        if (!newCode.trim()) return;
+        if (!confirm('학교 접속 코드를 수정하시겠습니까?')) return;
+        try {
+            await updateSchoolAccessCode(schoolId, newCode.trim());
+            alert('접속 코드가 성공적으로 변경되었습니다.');
+            setIsEditingCode(false);
+            setNewCode('');
+        } catch (err) {
+            alert('접속 코드 변경에 실패했습니다.');
+        }
+    };
+
     const handleDeleteSoftware = async (swId: string) => {
         if (!selectedClass || !confirm('이 에듀테크를 학급 목록에서 삭제하시겠습니까?')) return;
         const newRegistry = (selectedClass.registrySoftwares || []).filter(s => s.id !== swId);
@@ -336,15 +351,16 @@ export default function AdminPage() {
                 {schoolName && <span className="header-school">{schoolName}</span>}
                 <span className="header-mode-badge badge-admin">관리자</span>
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {/* 비밀번호 변경 */}
                     {!isEditingPw ? (
-                        <button className="btn btn-ghost btn-sm" onClick={() => setIsEditingPw(true)}>🔑 비번변경</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setIsEditingPw(true); setIsEditingCode(false); }}>🔑 PW변경</button>
                     ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--gray-50)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--gray-200)' }}>
                             <input
                                 className="form-control"
                                 type="password"
                                 placeholder="새 비밀번호"
-                                style={{ height: 28, width: 100, fontSize: '0.78rem' }}
+                                style={{ height: 28, width: 90, fontSize: '0.78rem' }}
                                 value={newPw}
                                 onChange={e => setNewPw(e.target.value)}
                             />
@@ -352,6 +368,25 @@ export default function AdminPage() {
                             <button className="btn btn-ghost btn-sm" style={{ height: 28, padding: '0 8px', fontSize: '0.78rem' }} onClick={() => { setIsEditingPw(false); setNewPw(''); }}>✕</button>
                         </div>
                     )}
+
+                    {/* 접속코드 변경 */}
+                    {!isEditingCode ? (
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setIsEditingCode(true); setIsEditingPw(false); }}>🔒 코드변경</button>
+                    ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--gray-50)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--gray-200)' }}>
+                            <input
+                                className="form-control"
+                                type="text"
+                                placeholder="새 접속코드"
+                                style={{ height: 28, width: 90, fontSize: '0.78rem' }}
+                                value={newCode}
+                                onChange={e => setNewCode(e.target.value)}
+                            />
+                            <button className="btn btn-primary btn-sm" style={{ height: 28, padding: '0 8px', fontSize: '0.78rem' }} onClick={handleUpdateCode}>저장</button>
+                            <button className="btn btn-ghost btn-sm" style={{ height: 28, padding: '0 8px', fontSize: '0.78rem' }} onClick={() => { setIsEditingCode(false); setNewCode(''); }}>✕</button>
+                        </div>
+                    )}
+
                     <button className="btn btn-ghost btn-sm" onClick={logout}>로그아웃</button>
                 </div>
             </header>

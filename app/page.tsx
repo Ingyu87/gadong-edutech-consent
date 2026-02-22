@@ -13,27 +13,54 @@ export default function HomePage() {
   const [showGuide, setShowGuide] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPass, setNewPass] = useState('');
+  const [newAccessCode, setNewAccessCode] = useState('2026');
   const [creating, setCreating] = useState(false);
 
+  // 접속 코드 확인용 상태
+  const [selectedSchoolForCode, setSelectedSchoolForCode] = useState<School | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+
   useEffect(() => {
-    getSchools().then(s => {
+    getSchools().then(async (s) => {
       setSchools(s);
       setLoading(false);
+
+      // 미이그레이션: accessCode가 없는 학교들에 대해 기본값(2026) 부여
+      const missingCode = s.filter(sch => !sch.accessCode);
+      if (missingCode.length > 0) {
+        const { updateSchoolAccessCode } = await import('@/lib/db');
+        for (const sch of missingCode) {
+          await updateSchoolAccessCode(sch.id, '2026');
+        }
+      }
     });
   }, []);
 
   const handleSelectSchool = (school: School) => {
-    sessionStorage.setItem('schoolId', school.id);
-    sessionStorage.setItem('schoolName', school.name);
-    router.push('/role');
+    setSelectedSchoolForCode(school);
+    setVerificationCode('');
+  };
+
+  const handleVerifyCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSchoolForCode) return;
+
+    const correctCode = selectedSchoolForCode.accessCode || '2026';
+    if (verificationCode === correctCode) {
+      sessionStorage.setItem('schoolId', selectedSchoolForCode.id);
+      sessionStorage.setItem('schoolName', selectedSchoolForCode.name);
+      router.push('/role');
+    } else {
+      alert('접속 코드가 일치하지 않습니다.');
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newPass.trim()) return;
+    if (!newName.trim() || !newPass.trim() || !newAccessCode.trim()) return;
     setCreating(true);
     try {
-      const id = await createSchool(newName.trim(), newPass.trim());
+      const id = await createSchool(newName.trim(), newPass.trim(), newAccessCode.trim());
       sessionStorage.setItem('schoolId', id);
       sessionStorage.setItem('schoolName', newName.trim());
       router.push('/role');
@@ -91,7 +118,34 @@ export default function HomePage() {
             </div>
           ) : (
             <>
-              {schools.length > 0 && (
+              {/* 접속 코드 입력 팝업 스타일 모달 */}
+              {selectedSchoolForCode && (
+                <div className="card" style={{ border: '2px solid var(--primary)', marginBottom: 24 }}>
+                  <p className="card-title">🔐 {selectedSchoolForCode.name} 접속 코드 입력</p>
+                  <form onSubmit={handleVerifyCode}>
+                    <div className="form-group">
+                      <label className="form-label">학교 접속 코드를 입력해 주세요</label>
+                      <input
+                        className="form-control"
+                        placeholder="접속 코드 입력"
+                        value={verificationCode}
+                        onChange={e => setVerificationCode(e.target.value)}
+                        autoFocus
+                        required
+                      />
+                      <p className="form-hint">교사 및 학부모 페이지 진입을 위한 보안 코드입니다.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button type="submit" className="btn btn-primary">확인</button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setSelectedSchoolForCode(null)}>취on
+                        취소
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {schools.length > 0 && !selectedSchoolForCode && (
                 <div className="card" style={{ marginBottom: 16 }}>
                   <p className="card-title">🏫 등록된 학교</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -140,6 +194,17 @@ export default function HomePage() {
                         required
                       />
                       <p className="form-hint">설정한 비밀번호로 관리자 모드에 접근합니다.</p>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">학교 접속 코드 <span className="form-required">*</span></label>
+                      <input
+                        className="form-control"
+                        placeholder="예: 2026"
+                        value={newAccessCode}
+                        onChange={e => setNewAccessCode(e.target.value)}
+                        required
+                      />
+                      <p className="form-hint">교사 및 학부모가 학교 페이지에 접속할 때 입력할 코드입니다.</p>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
                       <button type="submit" className="btn btn-primary" disabled={creating}>
