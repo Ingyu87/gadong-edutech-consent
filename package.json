@@ -11,7 +11,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "firebase": "^12.9.0",
-    "next": "15.1.7",
+    "next": "15.1.12",
     "papaparse": "^5.5.3",
     "qrcode": "^1.5.4",
     "react": "19.0.0",
@@ -25,7 +25,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.1.7",
+    "eslint-config-next": "15.1.12",
     "typescript": "^5"
   }
 }
