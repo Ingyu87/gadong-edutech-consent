@@ -54,7 +54,13 @@ export async function deleteSmcRecord(id: string): Promise<void> {
 export async function getClasses(schoolId: string): Promise<ClassConfig[]> {
     const q = query(collection(db, 'classes'), where('schoolId', '==', schoolId));
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as ClassConfig));
+    return snap.docs.map(d => {
+        const data = d.data();
+        const cls = { id: d.id, ...data } as ClassConfig;
+        if (cls.registrySoftwares != null && !Array.isArray(cls.registrySoftwares)) cls.registrySoftwares = [];
+        if (cls.selectedSoftwares != null && !Array.isArray(cls.selectedSoftwares)) cls.selectedSoftwares = [];
+        return cls;
+    });
 }
 
 export async function getClass(classId: string): Promise<ClassConfig | null> {

@@ -120,6 +120,12 @@ export default function ParentConsentPage() {
         const newCode = confirmationCode || generateCode();
         setConfirmationCode(newCode);
 
+        const responsesToSave: Record<string, ConsentResponse> = {};
+        Object.keys(responses).forEach(swId => {
+            const r = responses[swId] || { agree: null, collectionUse: null, thirdParty: null };
+            responsesToSave[swId] = { agree: true, collectionUse: r.collectionUse ?? null, thirdParty: r.thirdParty ?? null };
+        });
+
         await upsertConsent({
             schoolId,
             classId,
@@ -127,7 +133,7 @@ export default function ParentConsentPage() {
             studentName: get('parentStudentName'),
             parentName: get('parentName'),
             pin: get('parentPin'),
-            responses,
+            responses: responsesToSave,
             confirmationCode: newCode,
         }, consentId);
         setSaving(false);
@@ -145,7 +151,7 @@ export default function ParentConsentPage() {
     let agreedSlots = 0;
     swList.forEach(sw => {
         const r = responses[sw.id] || { agree: null, collectionUse: null, thirdParty: null };
-        [r.agree, r.collectionUse, r.thirdParty].forEach(v => {
+        [r.collectionUse, r.thirdParty].forEach(v => {
             totalSlots++;
             if (v !== null) answeredSlots++;
             if (v === true) agreedSlots++;
@@ -227,7 +233,7 @@ export default function ParentConsentPage() {
                 <div className="progress-bar-sticky" style={{ position: 'sticky', top: 60, zIndex: 90, background: 'var(--gray-50)', padding: '12px 0 20px', margin: '0 -4px' }}>
                     <div className="progress-bar-wrap" style={{ position: 'relative' }}>
                         <div className="progress-bar" style={{ width: `${(answeredCount / (totalCount || 1)) * 100}%` }} />
-                        <span className="progress-text">{answeredCount} / {totalCount} 완료</span>
+                        <span className="progress-text">에듀테크 {swList.length}개 · {answeredCount}/{totalCount} 항목 완료</span>
                     </div>
                 </div>
 
@@ -241,7 +247,7 @@ export default function ParentConsentPage() {
                             </p>
                         </div>
                         <div style={{ textAlign: 'right', fontSize: '0.82rem', color: 'var(--gray-500)' }}>
-                            {answeredCount}/{totalCount} 응답 완료
+                            {swList.length}개 중 {answeredCount}/{totalCount} 항목 응답
                         </div>
                     </div>
                 </div>
@@ -291,16 +297,7 @@ export default function ParentConsentPage() {
                                         </div>
                                     </div>
 
-                                    {/* 1. 기본 동의 */}
-                                    <div className="consent-row" style={{ marginTop: 12 }}>
-                                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>기본 동의</span>
-                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                            <button type="button" className={`consent-btn consent-btn-agree ${r.agree === true ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'agree', true)}>동의</button>
-                                            <button type="button" className={`consent-btn consent-btn-disagree ${r.agree === false ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'agree', false)}>비동의</button>
-                                        </div>
-                                    </div>
-
-                                    {/* 2. 수집·이용 동의 (내용 팝업 + 동의/비동의) */}
+                                    {/* 수집·이용 동의 (내용 팝업 + 동의/비동의) */}
                                     <div className="consent-row" style={{ marginTop: 10 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                             <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>수집·이용 동의</span>
@@ -317,7 +314,7 @@ export default function ParentConsentPage() {
                                         </div>
                                     </div>
 
-                                    {/* 3. 제3자 제공 동의 (내용 팝업 + 동의/비동의) */}
+                                    {/* 제3자 제공 동의 (내용 팝업 + 동의/비동의) */}
                                     <div className="consent-row" style={{ marginTop: 10 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                             <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>제3자 제공 동의</span>
