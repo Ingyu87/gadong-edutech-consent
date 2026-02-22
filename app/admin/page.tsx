@@ -382,9 +382,9 @@ export default function AdminPage() {
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 10 }}>
                                                         {(selectedClass.registrySoftwares || selectedClass.selectedSoftwares || []).map(sw => {
                                                             const withR = classConsents.map(c => ({ c, r: normalizeResp(c.responses[sw.id]) }));
-                                                            const agreeAll = withR.filter(({ r }) => r.agree === true && r.collectionUse === true && r.thirdParty === true);
-                                                            const anyDisagree = withR.filter(({ r }) => r.agree === false || r.collectionUse === false || r.thirdParty === false);
-                                                            const pending = withR.filter(({ r }) => r.agree == null || r.collectionUse == null || r.thirdParty == null);
+                                                            const agreeAll = withR.filter(({ r }) => r.collectionUse === true && r.thirdParty === true);
+                                                            const anyDisagree = withR.filter(({ r }) => r.collectionUse === false || r.thirdParty === false);
+                                                            const pending = withR.filter(({ r }) => r.collectionUse == null || r.thirdParty == null);
                                                             return (
                                                                 <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 180, background: 'white' }}>
                                                                     <p style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 6 }}>{sw.name}</p>
@@ -411,15 +411,16 @@ export default function AdminPage() {
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {classConsents.sort((a, b) => a.studentNumber - b.studentNumber).map(c => {
+                                                            {[...classConsents].sort((a, b) => a.studentNumber - b.studentNumber).map(c => {
                                                                 const isExpanded = expandedStudentId === c.id;
                                                                 const swList = selectedClass.registrySoftwares || selectedClass.selectedSoftwares || [];
-                                                                let agreedSlots = 0, totalSlots = 0;
+                                                                let agreedSlots = 0;
                                                                 swList.forEach(sw => {
                                                                     const r = normalizeResp(c.responses[sw.id]);
-                                                                    [r.agree, r.collectionUse, r.thirdParty].forEach(v => { totalSlots++; if (v === true) agreedSlots++; });
+                                                                    if (r.collectionUse === true) agreedSlots++;
+                                                                    if (r.thirdParty === true) agreedSlots++;
                                                                 });
-                                                                if (totalSlots === 0) totalSlots = swList.length * 3;
+                                                                const totalSlots = swList.length * 2;
 
                                                                 return (
                                                                     <Fragment key={c.id}>
@@ -456,7 +457,6 @@ export default function AdminPage() {
                                                                                                         <div key={sw.id} style={{ padding: '10px 12px', background: 'white', borderRadius: 8, border: '1px solid var(--gray-100)', fontSize: '0.82rem' }}>
                                                                                                             <div style={{ fontWeight: 600, marginBottom: 6 }}>{sw.name}</div>
                                                                                                             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.78rem' }}>
-                                                                                                                <span>{r.agree === true ? '✅' : r.agree === false ? '❌' : '—'} 기본</span>
                                                                                                                 <span>{r.collectionUse === true ? '✅' : r.collectionUse === false ? '❌' : '—'} 수집이용</span>
                                                                                                                 <span>{r.thirdParty === true ? '✅' : r.thirdParty === false ? '❌' : '—'} 제3자제공</span>
                                                                                                             </div>
@@ -502,47 +502,59 @@ export default function AdminPage() {
                                                     {swList.length === 0 ? (
                                                         <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>등록된 소프트웨어 없음</p>
                                                     ) : (
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, maxHeight: 420, overflowY: 'auto', paddingRight: 4 }}>
-                                                            {swList.map(sw => {
-                                                                const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
-                                                                return (
-                                                                    <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 12, overflow: 'hidden', background: 'white' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: approved ? '#f1f8f1' : '#fff9f0' }}>
-                                                                            <span style={{ fontSize: '1.1rem' }}>{approved ? '✅' : '⚠️'}</span>
-                                                                            <span style={{ fontWeight: 700, flex: 1 }}>{sw.name}</span>
-                                                                            <div style={{ display: 'flex', gap: 10 }}>
-                                                                                {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>사이트 ↗</a>}
-                                                                                {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a>}
-                                                                                <button className="btn btn-ghost btn-sm" style={{ height: 26, padding: '0 4px', fontSize: '0.75rem', color: 'var(--danger)' }}
-                                                                                    onClick={() => handleDeleteSoftware(sw.id)}>🗑️ 삭제</button>
-                                                                                {!approved && (
-                                                                                    <button className="btn btn-primary btn-sm"
-                                                                                        style={{ height: 26, padding: '0 8px', fontSize: '0.75rem' }}
-                                                                                        onClick={(e) => { e.stopPropagation(); handleManualApprove(sw.name); }}>
-                                                                                        승인 처리
-                                                                                    </button>
+                                                        <div className="table-wrapper" style={{ marginBottom: 20, maxHeight: 420, overflowY: 'auto' }}>
+                                                            <table>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>상태</th><th>소프트웨어명</th><th style={{ textAlign: 'right' }}>관리</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {swList.map(sw => {
+                                                                        const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
+                                                                        return (
+                                                                            <Fragment key={sw.id}>
+                                                                                <tr>
+                                                                                    <td style={{ textAlign: 'center' }}>{approved ? '✅' : '⚠️'}</td>
+                                                                                    <td>
+                                                                                        <div style={{ fontWeight: 700 }}>{sw.name || '(이름 없음)'}</div>
+                                                                                        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                                                                                            {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>사이트 ↗</a>}
+                                                                                            {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>약관 ↗</a>}
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td style={{ textAlign: 'right' }}>
+                                                                                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                                                                            {!approved && (
+                                                                                                <button className="btn btn-primary btn-sm" style={{ padding: '0 8px', height: 26, fontSize: '0.72rem' }}
+                                                                                                    onClick={() => handleManualApprove(sw.name)}>승인</button>
+                                                                                            )}
+                                                                                            <button className="btn btn-ghost btn-sm" style={{ padding: '0 6px', height: 26, fontSize: '0.72rem', color: 'var(--danger)' }}
+                                                                                                onClick={() => handleDeleteSoftware(sw.id)}>삭제</button>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                </tr>
+                                                                                {(sw.collectionUseConsent || sw.thirdPartyConsent) && (
+                                                                                    <tr style={{ background: 'var(--gray-50)' }}>
+                                                                                        <td colSpan={3} style={{ padding: '6px 12px' }}>
+                                                                                            <div style={{ display: 'flex', gap: 8 }}>
+                                                                                                {sw.collectionUseConsent && (
+                                                                                                    <button className="btn btn-outline btn-sm" style={{ fontSize: '0.68rem', padding: '2px 6px', height: 22, background: 'white' }}
+                                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 수집·이용 동의`, body: sw.collectionUseConsent! })}>📋 수집이용내용</button>
+                                                                                                )}
+                                                                                                {sw.thirdPartyConsent && (
+                                                                                                    <button className="btn btn-outline btn-sm" style={{ fontSize: '0.68rem', padding: '2px 6px', height: 22, background: 'white' }}
+                                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 제3자 제공 동의`, body: sw.thirdPartyConsent! })}>📋 제3자제공내용</button>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
                                                                                 )}
-                                                                            </div>
-                                                                        </div>
-                                                                        {(sw.collectionUseConsent || sw.thirdPartyConsent) && (
-                                                                            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'white', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                                                                {sw.collectionUseConsent && (
-                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
-                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 수집·이용 동의`, body: sw.collectionUseConsent! })}>
-                                                                                        📋 수집이용동의 내용
-                                                                                    </button>
-                                                                                )}
-                                                                                {sw.thirdPartyConsent && (
-                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
-                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 제3자 제공 동의`, body: sw.thirdPartyConsent! })}>
-                                                                                        📋 제3자제공동의 내용
-                                                                                    </button>
-                                                                                )}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            })}
+                                                                            </Fragment>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
                                                         </div>
                                                     )}
                                                 </>
