@@ -257,8 +257,7 @@ export default function TeacherPage() {
                     ))}
                 </div>
 
-
-                {/* CSV */}
+                {/* CSV TAB */}
                 {tab === 'csv' && (
                     <div>
                         <div className="card" style={{ marginBottom: 16 }}>
@@ -271,7 +270,6 @@ export default function TeacherPage() {
                                 )}
                             </div>
 
-                            {/* Google Sheets 안내 */}
                             <div style={{ background: '#f0f7ff', border: '1.5px solid #b3d4f5', borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: 14 }}>
                                 <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 10 }}>📊 에듀테크 목록 작성 및 업로드 방법</p>
                                 <ol style={{ paddingLeft: 18, fontSize: '0.85rem', lineHeight: 1.8, color: 'var(--gray-700)', margin: 0 }}>
@@ -315,7 +313,7 @@ export default function TeacherPage() {
                             </div>
                         </div>
 
-                        {/* Current Registry List */}
+                        {/* Current Registry List (Show if no CSV preview) */}
                         {allSoftwares.length > 0 && csvData.length === 0 && (
                             <div className="card">
                                 <p className="card-title">✅ 현재 등록된 에듀테크 ({allSoftwares.length}개)</p>
@@ -324,15 +322,51 @@ export default function TeacherPage() {
                                         <thead><tr><th>에듀테크명</th><th>심의여부</th><th>사용연령</th><th>링크</th></tr></thead>
                                         <tbody>
                                             {allSoftwares.map(item => (
-                                                <tr key={item.id}>
-                                                    <td style={{ fontWeight: 600 }}>{item.name}</td>
-                                                    <td>{isSmcApproved(item) ? <span className="badge badge-smc">✅ 심의완료</span> : <span className="badge badge-no-smc">⚠️ 심의 확인</span>}</td>
-                                                    <td>{item.ageRange || '-'}</td>
-                                                    <td>
-                                                        {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem', marginRight: 8 }}>사이트 ↗</a>}
-                                                        {item.privacyUrl && <a href={item.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a>}
-                                                    </td>
-                                                </tr>
+                                                <Fragment key={item.id}>
+                                                    <tr>
+                                                        <td style={{ fontWeight: 600 }}>{item.name}</td>
+                                                        <td>{isSmcApproved(item) ? <span className="badge badge-smc">✅ 심의완료</span> : <span className="badge badge-no-smc">⚠️ 심의 확인</span>}</td>
+                                                        <td>{item.ageRange || '-'}</td>
+                                                        <td>
+                                                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                                                {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>사이트 ↗</a>}
+                                                                {item.privacyUrl && <a href={item.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a>}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td colSpan={4} style={{ padding: '0 16px 12px', background: 'var(--gray-50)', borderTop: 'none' }}>
+                                                            <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, padding: 10, background: 'white' }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                                    <span style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)' }}>✨ 학부모 약관 요약 안내</span>
+                                                                    {item.privacyUrl && (
+                                                                        <button
+                                                                            className="btn btn-ghost btn-sm"
+                                                                            onClick={() => handleAutoSummarize(item, false)}
+                                                                            disabled={summarizingId === item.id}
+                                                                            style={{ padding: '4px 8px', fontSize: '0.75rem', height: 26 }}
+                                                                        >
+                                                                            {summarizingId === item.id ? '요약 중...' : '✨ AI 자동 요약'}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                                <textarea
+                                                                    className="form-control"
+                                                                    rows={2}
+                                                                    placeholder="AI 요약 버튼을 누르거나 직접 내용을 입력하세요."
+                                                                    style={{ fontSize: '0.8rem', width: '100%', resize: 'vertical' }}
+                                                                    value={item.privacySummary || ''}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        const updateItem = (s: SoftwareItem) => s.id === item.id ? { ...s, privacySummary: val } : s;
+                                                                        setAllSoftwares(prev => prev.map(updateItem));
+                                                                        setSelected(prev => prev.map(updateItem));
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </Fragment>
                                             ))}
                                         </tbody>
                                     </table>
@@ -349,22 +383,44 @@ export default function TeacherPage() {
                                         <thead><tr><th>에듀테크명</th><th>사용연령</th><th>사이트</th><th>약관</th></tr></thead>
                                         <tbody>
                                             {csvData.map(item => (
-                                                <tr key={item.id}>
-                                                    <td>{item.name}</td>
-                                                    <td>{item.ageRange || '-'}</td>
-                                                    <td>{item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>링크 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
-                                                    <td>{item.privacyUrl ? <a href={item.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
-                                                    <td>
-                                                        <button
-                                                            className="btn btn-ghost btn-sm"
-                                                            onClick={() => handleAutoSummarize(item, true)}
-                                                            disabled={summarizingId === item.id || !item.privacyUrl}
-                                                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                                                        >
-                                                            {summarizingId === item.id ? '요약 중...' : item.privacySummary ? '✅ 요약됨' : '✨ AI 요약'}
-                                                        </button>
-                                                    </td>
-                                                </tr>
+                                                <Fragment key={item.id}>
+                                                    <tr>
+                                                        <td>{item.name}</td>
+                                                        <td>{item.ageRange || '-'}</td>
+                                                        <td>{item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>링크 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
+                                                        <td>{item.privacyUrl ? <a href={item.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td colSpan={4} style={{ padding: '0 16px 12px', background: 'var(--gray-50)', borderTop: 'none' }}>
+                                                            <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, padding: 10, background: 'white' }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                                    <span style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)' }}>✨ 학부모 약관 요약 안내</span>
+                                                                    {item.privacyUrl && (
+                                                                        <button
+                                                                            className="btn btn-ghost btn-sm"
+                                                                            onClick={() => handleAutoSummarize(item, true)}
+                                                                            disabled={summarizingId === item.id}
+                                                                            style={{ padding: '4px 8px', fontSize: '0.75rem', height: 26 }}
+                                                                        >
+                                                                            {summarizingId === item.id ? '요약 중...' : '✨ AI 자동 요약'}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                                <textarea
+                                                                    className="form-control"
+                                                                    rows={2}
+                                                                    placeholder="AI 요약 버튼을 누르거나 직접 내용을 입력하세요."
+                                                                    style={{ fontSize: '0.8rem', width: '100%', resize: 'vertical' }}
+                                                                    value={item.privacySummary || ''}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setCsvData(prev => prev.map(s => s.id === item.id ? { ...s, privacySummary: val } : s));
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </Fragment>
                                             ))}
                                         </tbody>
                                     </table>
@@ -374,7 +430,7 @@ export default function TeacherPage() {
                     </div>
                 )}
 
-                {/* MONITOR */}
+                {/* MONITOR TAB */}
                 {tab === 'monitor' && (
                     <div className="card">
                         <p className="card-title">📋 학생별 동의 현황</p>
@@ -391,7 +447,7 @@ export default function TeacherPage() {
                                             const disagree = consents.filter(c => c.responses[sw.id] === false);
                                             const pending = consents.filter(c => c.responses[sw.id] == null);
                                             return (
-                                                <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 160 }}>
+                                                <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 160, background: 'white' }}>
                                                     <p style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 6 }}>{sw.name}</p>
                                                     <div style={{ fontSize: '0.8rem', lineHeight: 1.9 }}>
                                                         <span style={{ color: '#2e7d32' }}>✅ 동의 {agree.length}명</span><br />
@@ -487,10 +543,9 @@ export default function TeacherPage() {
                             </div>
                         )}
                     </div>
-                )
-                }
+                )}
 
-                {/* QR */}
+                {/* QR TAB */}
                 {tab === 'qr' && (
                     <div className="card" style={{ textAlign: 'center' }}>
                         <div className="card" style={{ marginBottom: 16 }}>

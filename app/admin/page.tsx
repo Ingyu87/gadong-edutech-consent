@@ -32,6 +32,7 @@ export default function AdminPage() {
     const [classConsents, setClassConsents] = useState<ConsentRecord[]>([]);
     const [classConsentsLoading, setClassConsentsLoading] = useState(false);
     const [showTop, setShowTop] = useState(false);
+    const [summarizingId, setSummarizingId] = useState<string | null>(null);
 
     useEffect(() => {
         const id = sessionStorage.getItem('schoolId');
@@ -166,6 +167,44 @@ export default function AdminPage() {
         alert(`${newItems.length}개 등록완료.${dupCount > 0 ? ` (중복 ${dupCount}개 제외)` : ''}`);
     };
 
+    const handleAutoSummarize = async (item: SoftwareItem) => {
+        if (!item.privacyUrl) return;
+        setSummarizingId(item.id);
+        try {
+            const res = await fetch('/api/privacy-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: item.privacyUrl }),
+            });
+            const data = await res.json();
+            if (data.summary) {
+                const updatedItem = { ...item, privacySummary: data.summary };
+                // Update in selectedClass softwares
+                if (selectedClass) {
+                    const updateList = (list: SoftwareItem[] | undefined) =>
+                        list ? list.map(s => s.id === item.id ? updatedItem : s) : [];
+
+                    const newClass: ClassConfig = {
+                        ...selectedClass,
+                        registrySoftwares: updateList(selectedClass.registrySoftwares),
+                        selectedSoftwares: updateList(selectedClass.selectedSoftwares) || [],
+                    };
+
+                    setSelectedClass(newClass);
+                    // Persistent update
+                    await upsertClass(newClass, newClass.id);
+                }
+            } else {
+                alert(data.error || '요약 생성에 실패했습니다.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('오류가 발생했습니다.');
+        } finally {
+            setSummarizingId(null);
+        }
+    };
+
     const handleResetAllSmc = async () => {
         if (!confirm('심의 완료 목록을 모두 비울까요? 이 작업은 되돌릴 수 없습니다.')) return;
         const { query, collection, where, getDocs, writeBatch } = await import('firebase/firestore');
@@ -287,22 +326,61 @@ export default function AdminPage() {
                                                     {swList.length === 0 ? (
                                                         <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>등록된 소프트웨어 없음</p>
                                                     ) : (
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                                                             {swList.map(sw => {
                                                                 const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
                                                                 return (
-                                                                    <div key={sw.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, background: approved ? '#e8f5e9' : '#fff3e0', border: `1px solid ${approved ? '#a5d6a7' : '#ffcc80'}`, fontSize: '0.85rem' }}>
-                                                                        <span>{approved ? '✅' : '⚠️'}</span>
-                                                                        <span style={{ fontWeight: 600 }}>{sw.name}</span>
-                                                                        {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" title="사이트" style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>🌐</a>}
-                                                                        {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" title="약관" style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>📄</a>}
-                                                                        {!approved && (
-                                                                            <button className="btn btn-primary btn-sm"
-                                                                                style={{ marginLeft: 4, height: 22, padding: '0 6px', fontSize: '0.7rem' }}
-                                                                                onClick={(e) => { e.stopPropagation(); handleManualApprove(sw.name); }}>
-                                                                                ✅ 승인
-                                                                            </button>
-                                                                        )}
+                                                                    <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 12, overflow: 'hidden', background: 'white' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: approved ? '#f1f8f1' : '#fff9f0' }}>
+                                                                            <span style={{ fontSize: '1.1rem' }}>{approved ? '✅' : '⚠️'}</span>
+                                                                            <span style={{ fontWeight: 700, flex: 1 }}>{sw.name}</span>
+                                                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                                                {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>사이트 ↗</a>}
+                                                                                {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a>}
+                                                                                {!approved && (
+                                                                                    <button className="btn btn-primary btn-sm"
+                                                                                        style={{ height: 26, padding: '0 8px', fontSize: '0.75rem' }}
+                                                                                        onClick={(e) => { e.stopPropagation(); handleManualApprove(sw.name); }}>
+                                                                                        승인 처리
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'white' }}>
+                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                                                <span style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--primary)' }}>✨ 학부모 약관 요약 안내 (AI 자동 요약 지원)</span>
+                                                                                {sw.privacyUrl && (
+                                                                                    <button
+                                                                                        className="btn btn-ghost btn-sm"
+                                                                                        onClick={() => handleAutoSummarize(sw)}
+                                                                                        disabled={summarizingId === sw.id}
+                                                                                        style={{ padding: '4px 8px', fontSize: '0.72rem', height: 24 }}
+                                                                                    >
+                                                                                        {summarizingId === sw.id ? '요약 중...' : '✨ AI 자동 요약'}
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                            <textarea
+                                                                                className="form-control"
+                                                                                rows={2}
+                                                                                placeholder="AI 요약 버튼을 누르거나 직접 내용을 입력하세요."
+                                                                                style={{ fontSize: '0.8rem', width: '100%', resize: 'vertical' }}
+                                                                                value={sw.privacySummary || ''}
+                                                                                onChange={async (e) => {
+                                                                                    const val = e.target.value;
+                                                                                    const updatedItem = { ...sw, privacySummary: val };
+                                                                                    const updateList = (list: SoftwareItem[] | undefined) =>
+                                                                                        list ? list.map(s => s.id === sw.id ? updatedItem : s) : undefined;
+                                                                                    const newClass = {
+                                                                                        ...selectedClass,
+                                                                                        registrySoftwares: updateList(selectedClass.registrySoftwares),
+                                                                                        selectedSoftwares: updateList(selectedClass.selectedSoftwares) || [],
+                                                                                    };
+                                                                                    setSelectedClass(newClass);
+                                                                                    await upsertClass(newClass, newClass.id);
+                                                                                }}
+                                                                            />
+                                                                        </div>
                                                                     </div>
                                                                 );
                                                             })}
