@@ -240,6 +240,12 @@ export default function ParentConsentPage() {
                                             {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" className="consent-link">약관 ↗</a>}
                                         </div>
                                     </div>
+                                    {sw.privacySummary && (
+                                        <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--gray-50)', borderRadius: 8, fontSize: '0.8rem', border: '1px solid var(--gray-100)', color: 'var(--gray-700)', whiteSpace: 'pre-wrap' }}>
+                                            <p style={{ fontWeight: 700, marginBottom: 4, color: 'var(--primary)', fontSize: '0.75rem' }}>✨ AI 약관 요약</p>
+                                            {sw.privacySummary}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="consent-card-footer">
                                     <span style={{ fontSize: '0.85rem', fontWeight: 600, color: resp === null ? 'var(--gray-400)' : resp ? 'var(--success)' : 'var(--danger)' }}>

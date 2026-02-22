@@ -38,6 +38,7 @@ export interface SoftwareItem {
     hasAi?: boolean;
     hasLms?: boolean;
     isSmcApproved?: boolean;
+    privacySummary?: string;
 }
 
 export interface ConsentRecord {

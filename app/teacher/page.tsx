@@ -29,6 +29,7 @@ export default function TeacherPage() {
     const [showTop, setShowTop] = useState(false);
     const [loading, setLoading] = useState(true);
     const [csvData, setCsvData] = useState<SoftwareItem[]>([]);
+    const [summarizingId, setSummarizingId] = useState<string | null>(null);
     const csvFileRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -158,6 +159,39 @@ export default function TeacherPage() {
         };
 
         parseFile('UTF-8');
+    };
+
+    const handleAutoSummarize = async (item: SoftwareItem, isFromPreview: boolean) => {
+        if (!item.privacyUrl) {
+            alert('약관 URL이 없습니다. 먼저 주소를 입력해 주세요.');
+            return;
+        }
+
+        setSummarizingId(item.id);
+        try {
+            const res = await fetch('/api/privacy-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: item.privacyUrl })
+            });
+            const data = await res.json();
+            if (data.error) {
+                alert(`요약 실패: ${data.error}`);
+            } else if (data.summary) {
+                if (isFromPreview) {
+                    setCsvData(prev => prev.map(s => s.id === item.id ? { ...s, privacySummary: data.summary } : s));
+                } else {
+                    const updateItem = (s: SoftwareItem) => s.id === item.id ? { ...s, privacySummary: data.summary } : s;
+                    setAllSoftwares(prev => prev.map(updateItem));
+                    setSelected(prev => prev.map(updateItem));
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert('AI 서비스 연결 중 오류가 발생했습니다.');
+        } finally {
+            setSummarizingId(null);
+        }
     };
 
     const handleSaveCsv = async () => {
@@ -320,6 +354,16 @@ export default function TeacherPage() {
                                                     <td>{item.ageRange || '-'}</td>
                                                     <td>{item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>링크 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
                                                     <td>{item.privacyUrl ? <a href={item.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
+                                                    <td>
+                                                        <button
+                                                            className="btn btn-ghost btn-sm"
+                                                            onClick={() => handleAutoSummarize(item, true)}
+                                                            disabled={summarizingId === item.id || !item.privacyUrl}
+                                                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                                        >
+                                                            {summarizingId === item.id ? '요약 중...' : item.privacySummary ? '✅ 요약됨' : '✨ AI 요약'}
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
