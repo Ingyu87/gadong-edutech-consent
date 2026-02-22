@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { getClasses, getConsents, getSmcRecords, addSmcRecord, deleteSmcRecord, upsertClass } from '@/lib/db';
-import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord } from '@/lib/types';
+import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
 import { storage, db } from '@/lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, getDocs, doc, setDoc, writeBatch } from 'firebase/firestore';
@@ -32,7 +32,13 @@ export default function AdminPage() {
     const [classConsents, setClassConsents] = useState<ConsentRecord[]>([]);
     const [classConsentsLoading, setClassConsentsLoading] = useState(false);
     const [showTop, setShowTop] = useState(false);
-    const [summarizingId, setSummarizingId] = useState<string | null>(null);
+    const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
+
+    const normalizeResp = (r: ConsentRecord['responses'][string]): ConsentResponse => {
+        if (r == null) return { agree: null, collectionUse: null, thirdParty: null };
+        if (typeof r === 'boolean') return { agree: r, collectionUse: null, thirdParty: null };
+        return { agree: r.agree ?? null, collectionUse: r.collectionUse ?? null, thirdParty: r.thirdParty ?? null };
+    };
 
     useEffect(() => {
         const id = sessionStorage.getItem('schoolId');
@@ -165,44 +171,6 @@ export default function AdminPage() {
         if (pdfFileRef.current) pdfFileRef.current.value = '';
         loadData(schoolId);
         alert(`${newItems.length}개 등록완료.${dupCount > 0 ? ` (중복 ${dupCount}개 제외)` : ''}`);
-    };
-
-    const handleAutoSummarize = async (item: SoftwareItem) => {
-        if (!item.privacyUrl) return;
-        setSummarizingId(item.id);
-        try {
-            const res = await fetch('/api/privacy-summary', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: item.privacyUrl }),
-            });
-            const data = await res.json();
-            if (data.summary) {
-                const updatedItem = { ...item, privacySummary: data.summary };
-                // Update in selectedClass softwares
-                if (selectedClass) {
-                    const updateList = (list: SoftwareItem[] | undefined) =>
-                        list ? list.map(s => s.id === item.id ? updatedItem : s) : [];
-
-                    const newClass: ClassConfig = {
-                        ...selectedClass,
-                        registrySoftwares: updateList(selectedClass.registrySoftwares),
-                        selectedSoftwares: updateList(selectedClass.selectedSoftwares) || [],
-                    };
-
-                    setSelectedClass(newClass);
-                    // Persistent update
-                    await upsertClass(newClass, newClass.id);
-                }
-            } else {
-                alert(data.error || '요약 생성에 실패했습니다.');
-            }
-        } catch (err) {
-            console.error(err);
-            alert('오류가 발생했습니다.');
-        } finally {
-            setSummarizingId(null);
-        }
     };
 
     const handleResetAllSmc = async () => {
@@ -346,41 +314,22 @@ export default function AdminPage() {
                                                                                 )}
                                                                             </div>
                                                                         </div>
-                                                                        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'white' }}>
-                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                                                                <span style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--primary)' }}>✨ 학부모 약관 요약 안내 (AI 자동 요약 지원)</span>
-                                                                                {sw.privacyUrl && (
-                                                                                    <button
-                                                                                        className="btn btn-ghost btn-sm"
-                                                                                        onClick={() => handleAutoSummarize(sw)}
-                                                                                        disabled={summarizingId === sw.id}
-                                                                                        style={{ padding: '4px 8px', fontSize: '0.72rem', height: 24 }}
-                                                                                    >
-                                                                                        {summarizingId === sw.id ? '요약 중...' : '✨ AI 자동 요약'}
+                                                                        {(sw.collectionUseConsent || sw.thirdPartyConsent) && (
+                                                                            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'white', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                                                {sw.collectionUseConsent && (
+                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
+                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 수집·이용 동의`, body: sw.collectionUseConsent! })}>
+                                                                                        📋 수집이용동의 내용
+                                                                                    </button>
+                                                                                )}
+                                                                                {sw.thirdPartyConsent && (
+                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
+                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 제3자 제공 동의`, body: sw.thirdPartyConsent! })}>
+                                                                                        📋 제3자제공동의 내용
                                                                                     </button>
                                                                                 )}
                                                                             </div>
-                                                                            <textarea
-                                                                                className="form-control"
-                                                                                rows={2}
-                                                                                placeholder="AI 요약 버튼을 누르거나 직접 내용을 입력하세요."
-                                                                                style={{ fontSize: '0.8rem', width: '100%', resize: 'vertical' }}
-                                                                                value={sw.privacySummary || ''}
-                                                                                onChange={async (e) => {
-                                                                                    const val = e.target.value;
-                                                                                    const updatedItem = { ...sw, privacySummary: val };
-                                                                                    const updateList = (list: SoftwareItem[] | undefined) =>
-                                                                                        list ? list.map(s => s.id === sw.id ? updatedItem : s) : undefined;
-                                                                                    const newClass = {
-                                                                                        ...selectedClass,
-                                                                                        registrySoftwares: updateList(selectedClass.registrySoftwares),
-                                                                                        selectedSoftwares: updateList(selectedClass.selectedSoftwares) || [],
-                                                                                    };
-                                                                                    setSelectedClass(newClass);
-                                                                                    await upsertClass(newClass, newClass.id);
-                                                                                }}
-                                                                            />
-                                                                        </div>
+                                                                        )}
                                                                     </div>
                                                                 );
                                                             })}
@@ -402,16 +351,17 @@ export default function AdminPage() {
                                                 <div style={{ maxHeight: 240, overflowY: 'auto', marginBottom: 20, padding: 2, border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-md)', background: 'var(--gray-50)' }}>
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 10 }}>
                                                         {(selectedClass.registrySoftwares || selectedClass.selectedSoftwares || []).map(sw => {
-                                                            const agree = classConsents.filter(c => c.responses[sw.id] === true);
-                                                            const disagree = classConsents.filter(c => c.responses[sw.id] === false);
-                                                            const pending = classConsents.filter(c => c.responses[sw.id] == null);
+                                                            const withR = classConsents.map(c => ({ c, r: normalizeResp(c.responses[sw.id]) }));
+                                                            const agreeAll = withR.filter(({ r }) => r.agree === true && r.collectionUse === true && r.thirdParty === true);
+                                                            const anyDisagree = withR.filter(({ r }) => r.agree === false || r.collectionUse === false || r.thirdParty === false);
+                                                            const pending = withR.filter(({ r }) => r.agree == null || r.collectionUse == null || r.thirdParty == null);
                                                             return (
                                                                 <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 180, background: 'white' }}>
                                                                     <p style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 6 }}>{sw.name}</p>
                                                                     <div style={{ fontSize: '0.8rem', lineHeight: 1.9 }}>
-                                                                        <span style={{ color: '#2e7d32' }}>✅ 동의 {agree.length}명</span><br />
-                                                                        <span style={{ color: 'var(--danger)' }}>❌ 비동의 {disagree.length}명</span>
-                                                                        {disagree.length > 0 && <span style={{ color: 'var(--danger)', fontSize: '0.75rem' }}> ({disagree.map(c => maskName(c.studentName)).join(', ')})</span>}
+                                                                        <span style={{ color: '#2e7d32' }}>✅ 전체 동의 {agreeAll.length}명</span><br />
+                                                                        <span style={{ color: 'var(--danger)' }}>❌ 비동의 {anyDisagree.length}명</span>
+                                                                        {anyDisagree.length > 0 && <span style={{ color: 'var(--danger)', fontSize: '0.75rem' }}> ({anyDisagree.slice(0, 3).map(({ c }) => maskName(c.studentName)).join(', ')}{anyDisagree.length > 3 ? '…' : ''})</span>}
                                                                         <br />
                                                                         <span style={{ color: 'var(--gray-400)' }}>— 미응답 {pending.length}명</span>
                                                                     </div>
@@ -434,7 +384,12 @@ export default function AdminPage() {
                                                             {classConsents.sort((a, b) => a.studentNumber - b.studentNumber).map(c => {
                                                                 const isExpanded = expandedStudentId === c.id;
                                                                 const swList = selectedClass.registrySoftwares || selectedClass.selectedSoftwares || [];
-                                                                const agreed = Object.values(c.responses).filter(v => v === true).length;
+                                                                let agreedSlots = 0, totalSlots = 0;
+                                                                swList.forEach(sw => {
+                                                                    const r = normalizeResp(c.responses[sw.id]);
+                                                                    [r.agree, r.collectionUse, r.thirdParty].forEach(v => { totalSlots++; if (v === true) agreedSlots++; });
+                                                                });
+                                                                if (totalSlots === 0) totalSlots = swList.length * 3;
 
                                                                 return (
                                                                     <Fragment key={c.id}>
@@ -452,7 +407,7 @@ export default function AdminPage() {
                                                                             </td>
                                                                             <td>
                                                                                 <span className="badge badge-smc" style={{ fontSize: '0.75rem' }}>
-                                                                                    {agreed} / {swList.length} 동의
+                                                                                    {agreedSlots} / {totalSlots} 동의
                                                                                 </span>
                                                                             </td>
                                                                         </tr>
@@ -464,13 +419,17 @@ export default function AdminPage() {
                                                                                             📋 {maskName(c.studentName)} 학생의 상세 동의 내역
                                                                                         </p>
                                                                                         <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
-                                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+                                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                                                                                 {swList.map(sw => {
-                                                                                                    const resp = c.responses[sw.id];
+                                                                                                    const r = normalizeResp(c.responses[sw.id]);
                                                                                                     return (
-                                                                                                        <div key={sw.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'white', border: '1px solid var(--gray-100)', borderRadius: 8, fontSize: '0.82rem' }}>
-                                                                                                            <span>{resp === true ? '✅' : resp === false ? '❌' : '—'}</span>
-                                                                                                            <span style={{ fontWeight: 600, flex: 1 }}>{sw.name}</span>
+                                                                                                        <div key={sw.id} style={{ padding: '10px 12px', background: 'white', borderRadius: 8, border: '1px solid var(--gray-100)', fontSize: '0.82rem' }}>
+                                                                                                            <div style={{ fontWeight: 600, marginBottom: 6 }}>{sw.name}</div>
+                                                                                                            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.78rem' }}>
+                                                                                                                <span>{r.agree === true ? '✅' : r.agree === false ? '❌' : '—'} 기본</span>
+                                                                                                                <span>{r.collectionUse === true ? '✅' : r.collectionUse === false ? '❌' : '—'} 수집이용</span>
+                                                                                                                <span>{r.thirdParty === true ? '✅' : r.thirdParty === false ? '❌' : '—'} 제3자제공</span>
+                                                                                                            </div>
                                                                                                         </div>
                                                                                                     );
                                                                                                 })}
@@ -595,6 +554,21 @@ export default function AdminPage() {
             <button className={`btn-top ${showTop ? 'visible' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 ↑
             </button>
+
+            {consentModal && (
+                <div className="consent-popup-overlay" onClick={() => setConsentModal(null)}>
+                    <div className="consent-popup" onClick={e => e.stopPropagation()}>
+                        <div className="consent-popup-header">
+                            <h3>{consentModal.title}</h3>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConsentModal(null)} aria-label="닫기">✕</button>
+                        </div>
+                        <div className="consent-popup-body">{consentModal.body}</div>
+                        <div className="consent-popup-footer">
+                            <button type="button" className="btn btn-primary" onClick={() => setConsentModal(null)}>확인</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

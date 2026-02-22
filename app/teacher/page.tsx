@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { getClass, getSmcRecords, getConsents, upsertClass } from '@/lib/db';
-import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord } from '@/lib/types';
+import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, writeBatch } from 'firebase/firestore';
 import QRCode from 'qrcode';
@@ -29,8 +29,15 @@ export default function TeacherPage() {
     const [showTop, setShowTop] = useState(false);
     const [loading, setLoading] = useState(true);
     const [csvData, setCsvData] = useState<SoftwareItem[]>([]);
-    const [summarizingId, setSummarizingId] = useState<string | null>(null);
+    const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
     const csvFileRef = useRef<HTMLInputElement>(null);
+
+    /** 구 형식(boolean) 응답을 ConsentResponse로 정규화 */
+    const normalizeResp = (r: ConsentRecord['responses'][string]): ConsentResponse => {
+        if (r == null) return { agree: null, collectionUse: null, thirdParty: null };
+        if (typeof r === 'boolean') return { agree: r, collectionUse: null, thirdParty: null };
+        return { agree: r.agree ?? null, collectionUse: r.collectionUse ?? null, thirdParty: r.thirdParty ?? null };
+    };
 
     useEffect(() => {
         const id = sessionStorage.getItem('schoolId');
@@ -119,7 +126,7 @@ export default function TeacherPage() {
                 header: true,
                 skipEmptyLines: true,
                 encoding: encoding,
-                transformHeader: (h) => h.trim().replace(/^\uFEFF/, ''),
+                transformHeader: (h) => h.trim().replace(/^\uFEFF/, '').replace(/\r?\n/g, '').trim(),
                 complete: (result) => {
                     const rows = result.data as Record<string, string>[];
                     console.log(`Parsed rows (${encoding}):`, rows);
@@ -134,6 +141,8 @@ export default function TeacherPage() {
                             const ageKey = keys.find(k => k.includes('연령') || k.toLowerCase().includes('age')) || '';
                             const urlKey = keys.find(k => k.includes('주소') || k.toLowerCase().includes('url')) || '';
                             const privacyKey = keys.find(k => k.includes('약관') || k.includes('방침') || k.toLowerCase().includes('privacy')) || '';
+                            const collectionKey = keys.find(k => k.includes('수집') && k.includes('이용')) || keys.find(k => k.includes('수집이용')) || '';
+                            const thirdPartyKey = keys.find(k => k.includes('제3자') && k.includes('제공')) || keys.find(k => k.includes('제3자제공')) || '';
 
                             return {
                                 id: `csv_${i}_${Date.now()}`,
@@ -141,6 +150,8 @@ export default function TeacherPage() {
                                 ageRange: (r[ageKey] || '').trim(),
                                 url: (r[urlKey] || '').trim(),
                                 privacyUrl: (r[privacyKey] || '').trim(),
+                                collectionUseConsent: (r[collectionKey] || '').trim() || undefined,
+                                thirdPartyConsent: (r[thirdPartyKey] || '').trim() || undefined,
                                 hasAi: false,
                                 hasLms: false,
                             };
@@ -159,39 +170,6 @@ export default function TeacherPage() {
         };
 
         parseFile('UTF-8');
-    };
-
-    const handleAutoSummarize = async (item: SoftwareItem, isFromPreview: boolean) => {
-        if (!item.privacyUrl) {
-            alert('약관 URL이 없습니다. 먼저 주소를 입력해 주세요.');
-            return;
-        }
-
-        setSummarizingId(item.id);
-        try {
-            const res = await fetch('/api/privacy-summary', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: item.privacyUrl })
-            });
-            const data = await res.json();
-            if (data.error) {
-                alert(`요약 실패: ${data.error}`);
-            } else if (data.summary) {
-                if (isFromPreview) {
-                    setCsvData(prev => prev.map(s => s.id === item.id ? { ...s, privacySummary: data.summary } : s));
-                } else {
-                    const updateItem = (s: SoftwareItem) => s.id === item.id ? { ...s, privacySummary: data.summary } : s;
-                    setAllSoftwares(prev => prev.map(updateItem));
-                    setSelected(prev => prev.map(updateItem));
-                }
-            }
-        } catch (e) {
-            console.error(e);
-            alert('AI 서비스 연결 중 오류가 발생했습니다.');
-        } finally {
-            setSummarizingId(null);
-        }
     };
 
     const handleSaveCsv = async () => {
@@ -292,8 +270,8 @@ export default function TeacherPage() {
                             <div className="alert alert-info" style={{ marginBottom: 12 }}>
                                 <span>ℹ️</span>
                                 <div>
-                                    <strong>CSV 컬럼명:</strong> <code>에듀테크명, 약관, 사이트주소, 사용연령</code><br />
-                                    등록하면 <strong>즉시 우리 반 에듀테크로 활성화</strong>됩니다.
+                                    <strong>CSV 컬럼명:</strong> <code>에듀테크명, 약관, 사이트주소, 사용연령, 수집이용동의, 제3자제공동의</code><br />
+                                    수집이용동의·제3자제공동의는 학부모에게 팝업으로 안내됩니다. 등록하면 <strong>즉시 우리 반 에듀테크로 활성화</strong>됩니다.
                                 </div>
                             </div>
                             <div className="form-group" style={{ marginBottom: 16 }}>
@@ -336,33 +314,22 @@ export default function TeacherPage() {
                                                     </tr>
                                                     <tr>
                                                         <td colSpan={4} style={{ padding: '0 16px 12px', background: 'var(--gray-50)', borderTop: 'none' }}>
-                                                            <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, padding: 10, background: 'white' }}>
-                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                                                    <span style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)' }}>✨ 학부모 약관 요약 안내</span>
-                                                                    {item.privacyUrl && (
-                                                                        <button
-                                                                            className="btn btn-ghost btn-sm"
-                                                                            onClick={() => handleAutoSummarize(item, false)}
-                                                                            disabled={summarizingId === item.id}
-                                                                            style={{ padding: '4px 8px', fontSize: '0.75rem', height: 26 }}
-                                                                        >
-                                                                            {summarizingId === item.id ? '요약 중...' : '✨ AI 자동 요약'}
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                                <textarea
-                                                                    className="form-control"
-                                                                    rows={2}
-                                                                    placeholder="AI 요약 버튼을 누르거나 직접 내용을 입력하세요."
-                                                                    style={{ fontSize: '0.8rem', width: '100%', resize: 'vertical' }}
-                                                                    value={item.privacySummary || ''}
-                                                                    onChange={(e) => {
-                                                                        const val = e.target.value;
-                                                                        const updateItem = (s: SoftwareItem) => s.id === item.id ? { ...s, privacySummary: val } : s;
-                                                                        setAllSoftwares(prev => prev.map(updateItem));
-                                                                        setSelected(prev => prev.map(updateItem));
-                                                                    }}
-                                                                />
+                                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                                {item.collectionUseConsent && (
+                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.78rem' }}
+                                                                        onClick={() => setConsentModal({ title: `${item.name} – 수집·이용 동의`, body: item.collectionUseConsent })}>
+                                                                        📋 수집이용동의 내용 보기
+                                                                    </button>
+                                                                )}
+                                                                {item.thirdPartyConsent && (
+                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.78rem' }}
+                                                                        onClick={() => setConsentModal({ title: `${item.name} – 제3자 제공 동의`, body: item.thirdPartyConsent! })}>
+                                                                        📋 제3자제공동의 내용 보기
+                                                                    </button>
+                                                                )}
+                                                                {!item.collectionUseConsent && !item.thirdPartyConsent && (
+                                                                    <span style={{ fontSize: '0.8rem', color: 'var(--gray-400)' }}>수집이용/제3자제공 동의 문구 없음 (CSV에서 입력)</span>
+                                                                )}
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -380,46 +347,42 @@ export default function TeacherPage() {
                                 <p className="card-title">📋 등록 예정 목록 미리보기</p>
                                 <div className="table-wrapper">
                                     <table>
-                                        <thead><tr><th>에듀테크명</th><th>사용연령</th><th>사이트</th><th>약관</th></tr></thead>
+                                        <thead><tr><th>에듀테크명</th><th>사용연령</th><th>사이트</th><th>약관</th><th>수집이용/제3자제공</th></tr></thead>
                                         <tbody>
                                             {csvData.map(item => (
                                                 <Fragment key={item.id}>
                                                     <tr>
                                                         <td>{item.name}</td>
                                                         <td>{item.ageRange || '-'}</td>
-                                                        <td>{item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>링크 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
-                                                        <td>{item.privacyUrl ? <a href={item.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a> : <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>미입력</span>}</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td colSpan={4} style={{ padding: '0 16px 12px', background: 'var(--gray-50)', borderTop: 'none' }}>
-                                                            <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, padding: 10, background: 'white' }}>
-                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                                                    <span style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)' }}>✨ 학부모 약관 요약 안내</span>
-                                                                    {item.privacyUrl && (
-                                                                        <button
-                                                                            className="btn btn-ghost btn-sm"
-                                                                            onClick={() => handleAutoSummarize(item, true)}
-                                                                            disabled={summarizingId === item.id}
-                                                                            style={{ padding: '4px 8px', fontSize: '0.75rem', height: 26 }}
-                                                                        >
-                                                                            {summarizingId === item.id ? '요약 중...' : '✨ AI 자동 요약'}
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                                <textarea
-                                                                    className="form-control"
-                                                                    rows={2}
-                                                                    placeholder="AI 요약 버튼을 누르거나 직접 내용을 입력하세요."
-                                                                    style={{ fontSize: '0.8rem', width: '100%', resize: 'vertical' }}
-                                                                    value={item.privacySummary || ''}
-                                                                    onChange={(e) => {
-                                                                        const val = e.target.value;
-                                                                        setCsvData(prev => prev.map(s => s.id === item.id ? { ...s, privacySummary: val } : s));
-                                                                    }}
-                                                                />
+                                                        <td>{item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>링크 ↗</a> : <span style={{ color: 'var(--gray-400)', fontSize: '0.8rem' }}>—</span>}</td>
+                                                        <td>{item.privacyUrl ? <a href={item.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a> : <span style={{ color: 'var(--gray-400)', fontSize: '0.8rem' }}>—</span>}</td>
+                                                        <td>
+                                                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                                                {item.collectionUseConsent ? <span className="badge badge-smc" style={{ fontSize: '0.7rem' }}>수집이용</span> : <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>—</span>}
+                                                                {item.thirdPartyConsent ? <span className="badge badge-smc" style={{ fontSize: '0.7rem' }}>제3자제공</span> : <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>—</span>}
                                                             </div>
                                                         </td>
                                                     </tr>
+                                                    {(item.collectionUseConsent || item.thirdPartyConsent) && (
+                                                        <tr>
+                                                            <td colSpan={5} style={{ padding: '0 16px 12px', background: 'var(--gray-50)', borderTop: 'none' }}>
+                                                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                                    {item.collectionUseConsent && (
+                                                                        <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.78rem' }}
+                                                                            onClick={() => setConsentModal({ title: `${item.name} – 수집·이용 동의`, body: item.collectionUseConsent! })}>
+                                                                            📋 수집이용동의 내용 보기
+                                                                        </button>
+                                                                    )}
+                                                                    {item.thirdPartyConsent && (
+                                                                        <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.78rem' }}
+                                                                            onClick={() => setConsentModal({ title: `${item.name} – 제3자 제공 동의`, body: item.thirdPartyConsent! })}>
+                                                                            📋 제3자제공동의 내용 보기
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
                                                 </Fragment>
                                             ))}
                                         </tbody>
@@ -443,16 +406,17 @@ export default function TeacherPage() {
                                 <div style={{ maxHeight: 240, overflowY: 'auto', marginBottom: 20, padding: 2, border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-md)', background: 'var(--gray-50)' }}>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 10 }}>
                                         {swList.map(sw => {
-                                            const agree = consents.filter(c => c.responses[sw.id] === true);
-                                            const disagree = consents.filter(c => c.responses[sw.id] === false);
-                                            const pending = consents.filter(c => c.responses[sw.id] == null);
+                                            const withResp = consents.map(c => ({ c, r: normalizeResp(c.responses[sw.id]) }));
+                                            const agreeAll = withResp.filter(({ r }) => r.agree === true && r.collectionUse === true && r.thirdParty === true);
+                                            const anyDisagree = withResp.filter(({ r }) => r.agree === false || r.collectionUse === false || r.thirdParty === false);
+                                            const pending = withResp.filter(({ r }) => r.agree == null || r.collectionUse == null || r.thirdParty == null);
                                             return (
                                                 <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 160, background: 'white' }}>
                                                     <p style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 6 }}>{sw.name}</p>
                                                     <div style={{ fontSize: '0.8rem', lineHeight: 1.9 }}>
-                                                        <span style={{ color: '#2e7d32' }}>✅ 동의 {agree.length}명</span><br />
-                                                        <span style={{ color: 'var(--danger)' }}>❌ 비동의 {disagree.length}명</span>
-                                                        {disagree.length > 0 && <span style={{ color: 'var(--danger)', fontSize: '0.72rem' }}> ({disagree.map(c => maskName(c.studentName)).join(', ')})</span>}
+                                                        <span style={{ color: '#2e7d32' }}>✅ 전체 동의 {agreeAll.length}명</span><br />
+                                                        <span style={{ color: 'var(--danger)' }}>❌ 비동의 {anyDisagree.length}명</span>
+                                                        {anyDisagree.length > 0 && <span style={{ color: 'var(--danger)', fontSize: '0.72rem' }}> ({anyDisagree.slice(0, 3).map(({ c }) => maskName(c.studentName)).join(', ')}{anyDisagree.length > 3 ? '…' : ''})</span>}
                                                         <br />
                                                         <span style={{ color: 'var(--gray-400)' }}>— 미응답 {pending.length}명</span>
                                                     </div>
@@ -481,8 +445,15 @@ export default function TeacherPage() {
                                         {consents.sort((a, b) => a.studentNumber - b.studentNumber).map(c => {
                                             const isExpanded = expandedStudentId === c.id;
                                             const swList = classConfig.registrySoftwares || classConfig.selectedSoftwares || [];
-                                            const total = swList.length;
-                                            const agreed = Object.values(c.responses).filter(v => v === true).length;
+                                            let agreedSlots = 0;
+                                            let totalSlots = 0;
+                                            swList.forEach(sw => {
+                                                const r = normalizeResp(c.responses[sw.id]);
+                                                if (r.agree !== undefined) { totalSlots++; if (r.agree === true) agreedSlots++; }
+                                                if (r.collectionUse !== undefined) { totalSlots++; if (r.collectionUse === true) agreedSlots++; }
+                                                if (r.thirdParty !== undefined) { totalSlots++; if (r.thirdParty === true) agreedSlots++; }
+                                            });
+                                            if (totalSlots === 0) totalSlots = swList.length * 3;
 
                                             return (
                                                 <Fragment key={c.id}>
@@ -500,7 +471,7 @@ export default function TeacherPage() {
                                                         </td>
                                                         <td style={{ textAlign: 'center' }}>
                                                             <span className="badge badge-smc" style={{ fontSize: '0.75rem' }}>
-                                                                {agreed} / {total} 동의
+                                                                {agreedSlots} / {totalSlots} 동의
                                                             </span>
                                                         </td>
                                                         <td style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--gray-400)' }}>
@@ -519,13 +490,17 @@ export default function TeacherPage() {
                                                                         </button>
                                                                     </p>
                                                                     <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
-                                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                                                             {swList.map(sw => {
-                                                                                const resp = c.responses[sw.id];
+                                                                                const r = normalizeResp(c.responses[sw.id]);
                                                                                 return (
-                                                                                    <div key={sw.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'white', borderRadius: 8, border: '1px solid var(--gray-100)', fontSize: '0.82rem' }}>
-                                                                                        <span>{resp === true ? '✅' : resp === false ? '❌' : '—'}</span>
-                                                                                        <span style={{ fontWeight: 600, flex: 1 }}>{sw.name}</span>
+                                                                                    <div key={sw.id} style={{ padding: '10px 12px', background: 'white', borderRadius: 8, border: '1px solid var(--gray-100)', fontSize: '0.82rem' }}>
+                                                                                        <div style={{ fontWeight: 600, marginBottom: 6 }}>{sw.name}</div>
+                                                                                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.78rem' }}>
+                                                                                            <span>{r.agree === true ? '✅' : r.agree === false ? '❌' : '—'} 기본</span>
+                                                                                            <span>{r.collectionUse === true ? '✅' : r.collectionUse === false ? '❌' : '—'} 수집이용</span>
+                                                                                            <span>{r.thirdParty === true ? '✅' : r.thirdParty === false ? '❌' : '—'} 제3자제공</span>
+                                                                                        </div>
                                                                                     </div>
                                                                                 );
                                                                             })}
@@ -592,6 +567,22 @@ export default function TeacherPage() {
             <button className={`btn-top ${showTop ? 'visible' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 ↑
             </button>
+
+            {/* 동의 내용 팝업 (폰에서 보기 쉬움) */}
+            {consentModal && (
+                <div className="consent-popup-overlay" onClick={() => setConsentModal(null)}>
+                    <div className="consent-popup" onClick={e => e.stopPropagation()}>
+                        <div className="consent-popup-header">
+                            <h3>{consentModal.title}</h3>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConsentModal(null)} aria-label="닫기">✕</button>
+                        </div>
+                        <div className="consent-popup-body">{consentModal.body}</div>
+                        <div className="consent-popup-footer">
+                            <button type="button" className="btn btn-primary" onClick={() => setConsentModal(null)}>확인</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -3,12 +3,19 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getClass, upsertConsent, getConsentById, getSmcRecords } from '@/lib/db';
-import { ClassConfig, SoftwareItem, ConsentRecord, SmcRecord } from '@/lib/types';
+import { ClassConfig, SoftwareItem, ConsentRecord, SmcRecord, ConsentResponse } from '@/lib/types';
+
+function normalizeResp(r: ConsentRecord['responses'][string]): ConsentResponse {
+    if (r == null) return { agree: null, collectionUse: null, thirdParty: null };
+    if (typeof r === 'boolean') return { agree: r, collectionUse: null, thirdParty: null };
+    return { agree: r.agree ?? null, collectionUse: r.collectionUse ?? null, thirdParty: r.thirdParty ?? null };
+}
 
 export default function ParentConsentPage() {
     const router = useRouter();
     const [classConfig, setClassConfig] = useState<ClassConfig | null>(null);
-    const [responses, setResponses] = useState<Record<string, boolean | null>>({});
+    const [responses, setResponses] = useState<Record<string, ConsentResponse>>({});
+    const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [confirmationCode, setConfirmationCode] = useState('');
@@ -54,24 +61,39 @@ export default function ParentConsentPage() {
                 return;
             }
             setExistingConsent(existing);
-            setResponses(existing.responses || {});
+            const raw = existing.responses || {};
+            const normalized: Record<string, ConsentResponse> = {};
+            (cls?.registrySoftwares || cls?.selectedSoftwares || []).forEach(sw => {
+                normalized[sw.id] = normalizeResp(raw[sw.id]);
+            });
+            setResponses(normalized);
             if (existing.confirmationCode) setConfirmationCode(existing.confirmationCode);
         } else {
-            const init: Record<string, null> = {};
-            cls?.selectedSoftwares?.forEach(sw => { init[sw.id] = null; });
+            const init: Record<string, ConsentResponse> = {};
+            (cls?.registrySoftwares || cls?.selectedSoftwares || []).forEach(sw => {
+                init[sw.id] = { agree: null, collectionUse: null, thirdParty: null };
+            });
             setResponses(init);
         }
         setLoaded(true);
     };
 
-    const handleAgree = (swId: string, val: boolean) => {
-        setResponses(prev => ({ ...prev, [swId]: prev[swId] === val ? null : val }));
+    type ConsentKey = keyof ConsentResponse;
+    const handleAgree = (swId: string, key: ConsentKey, val: boolean) => {
+        setResponses(prev => {
+            const cur = prev[swId] || { agree: null, collectionUse: null, thirdParty: null };
+            const currentVal = cur[key];
+            const nextVal = currentVal === val ? null : val;
+            return { ...prev, [swId]: { ...cur, [key]: nextVal } };
+        });
     };
 
     const handleAgreeAll = () => {
-        const all: Record<string, boolean> = {};
+        const all: Record<string, ConsentResponse> = {};
         const swList = classConfig?.registrySoftwares || classConfig?.selectedSoftwares || [];
-        swList.forEach(sw => { all[sw.id] = true; });
+        swList.forEach(sw => {
+            all[sw.id] = { agree: true, collectionUse: true, thirdParty: true };
+        });
         setResponses(all);
     };
 
@@ -111,9 +133,20 @@ export default function ParentConsentPage() {
         smcName.trim().toLowerCase() === swName.trim().toLowerCase();
 
     const swList = classConfig?.registrySoftwares || classConfig?.selectedSoftwares || [];
-    const totalCount = swList.length;
-    const agreedCount = Object.values(responses).filter(v => v === true).length;
-    const answeredCount = Object.values(responses).filter(v => v !== null).length;
+    let totalSlots = 0;
+    let answeredSlots = 0;
+    let agreedSlots = 0;
+    swList.forEach(sw => {
+        const r = responses[sw.id] || { agree: null, collectionUse: null, thirdParty: null };
+        [r.agree, r.collectionUse, r.thirdParty].forEach(v => {
+            totalSlots++;
+            if (v !== null) answeredSlots++;
+            if (v === true) agreedSlots++;
+        });
+    });
+    const totalCount = totalSlots;
+    const answeredCount = answeredSlots;
+    const agreedCount = agreedSlots;
 
     if (!loaded) return (
         <div className="app-shell">
@@ -147,7 +180,7 @@ export default function ParentConsentPage() {
                         {get('parentStudentName')} 학생 ({get('parentName')} 학부모님)
                     </p>
                     <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>
-                        총 {totalCount}개 중 <strong>{agreedCount}개 동의</strong>
+                        총 {totalCount}개 항목 중 <strong>{agreedCount}개 동의</strong>
                     </p>
                     <div className="alert alert-warning" style={{ textAlign: 'left', marginBottom: 12 }}>
                         <span>📝</span>
@@ -217,15 +250,19 @@ export default function ParentConsentPage() {
                     <span>법적으로 규정된 목적(학교생활기록부 및 건강기록부 작성 등) 이외의 수집 항목들에 대한 정보 이용 동의를 거부할 권리가 있음을 알려드리며 아울러 거부 시 해당 항목의 서비스가 제공되지 않는 제한 사항이 있을 수 있습니다.</span>
                 </div>
 
-                {/* Individual consent (Mobile Cards) */}
+                {/* Individual consent (Mobile Cards) - 기본/수집이용/제3자제공 각각 체크 */}
                 <div className="consent-list-container">
                     {(classConfig.registrySoftwares || classConfig.selectedSoftwares || []).map((sw: SoftwareItem) => {
-                        const resp = responses[sw.id];
+                        const r = responses[sw.id] || { agree: null, collectionUse: null, thirdParty: null };
+                        const isNew = !responses[sw.id] && existingConsent;
                         const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
                         return (
-                            <div key={sw.id} className="consent-card">
+                            <div key={sw.id} className="consent-card" style={{ border: isNew ? '2px solid var(--primary)' : undefined }}>
                                 <div className="consent-card-header">
-                                    <div className="consent-card-title">{sw.name}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <div className="consent-card-title">{sw.name}</div>
+                                        {isNew && <span className="badge" style={{ background: 'var(--primary)', color: 'white', fontSize: '0.65rem', animation: 'pulse 2s infinite' }}>✨ 신규 추가</span>}
+                                    </div>
                                     {approved ? (
                                         <span className="badge badge-smc">✅ 심의완료</span>
                                     ) : (
@@ -240,24 +277,48 @@ export default function ParentConsentPage() {
                                             {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" className="consent-link">약관 ↗</a>}
                                         </div>
                                     </div>
-                                    {sw.privacySummary && (
-                                        <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--gray-50)', borderRadius: 8, fontSize: '0.8rem', border: '1px solid var(--gray-100)', color: 'var(--gray-700)', whiteSpace: 'pre-wrap' }}>
-                                            <p style={{ fontWeight: 700, marginBottom: 4, color: 'var(--primary)', fontSize: '0.75rem' }}>✨ AI 약관 요약</p>
-                                            {sw.privacySummary}
+
+                                    {/* 1. 기본 동의 */}
+                                    <div className="consent-row" style={{ marginTop: 12 }}>
+                                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>기본 동의</span>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <button type="button" className={`consent-btn consent-btn-agree ${r.agree === true ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'agree', true)}>동의</button>
+                                            <button type="button" className={`consent-btn consent-btn-disagree ${r.agree === false ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'agree', false)}>비동의</button>
                                         </div>
-                                    )}
-                                </div>
-                                <div className="consent-card-footer">
-                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: resp === null ? 'var(--gray-400)' : resp ? 'var(--success)' : 'var(--danger)' }}>
-                                        {resp === true ? '동의함' : resp === false ? '동의하지 않음' : '대기 중...'}
-                                    </span>
-                                    <div style={{ display: 'flex', gap: 8 }}>
-                                        <button
-                                            className={`consent-btn consent-btn-agree ${resp === true ? 'active' : ''}`}
-                                            onClick={() => handleAgree(sw.id, true)}>동의</button>
-                                        <button
-                                            className={`consent-btn consent-btn-disagree ${resp === false ? 'active' : ''}`}
-                                            onClick={() => handleAgree(sw.id, false)}>비동의</button>
+                                    </div>
+
+                                    {/* 2. 수집·이용 동의 (내용 팝업 + 동의/비동의) */}
+                                    <div className="consent-row" style={{ marginTop: 10 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>수집·이용 동의</span>
+                                            {sw.collectionUseConsent && (
+                                                <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px', color: 'var(--primary)' }}
+                                                    onClick={() => setConsentModal({ title: `${sw.name} – 수집·이용 동의`, body: sw.collectionUseConsent! })}>
+                                                    내용 보기
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <button type="button" className={`consent-btn consent-btn-agree ${r.collectionUse === true ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'collectionUse', true)}>동의</button>
+                                            <button type="button" className={`consent-btn consent-btn-disagree ${r.collectionUse === false ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'collectionUse', false)}>비동의</button>
+                                        </div>
+                                    </div>
+
+                                    {/* 3. 제3자 제공 동의 (내용 팝업 + 동의/비동의) */}
+                                    <div className="consent-row" style={{ marginTop: 10 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>제3자 제공 동의</span>
+                                            {sw.thirdPartyConsent && (
+                                                <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px', color: 'var(--primary)' }}
+                                                    onClick={() => setConsentModal({ title: `${sw.name} – 제3자 제공 동의`, body: sw.thirdPartyConsent! })}>
+                                                    내용 보기
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <button type="button" className={`consent-btn consent-btn-agree ${r.thirdParty === true ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'thirdParty', true)}>동의</button>
+                                            <button type="button" className={`consent-btn consent-btn-disagree ${r.thirdParty === false ? 'active' : ''}`} onClick={() => handleAgree(sw.id, 'thirdParty', false)}>비동의</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -296,6 +357,22 @@ export default function ParentConsentPage() {
             <button className={`btn-top ${showTop ? 'visible' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 ↑
             </button>
+
+            {/* 동의 내용 팝업 (폰에서 보기 쉬움) */}
+            {consentModal && (
+                <div className="consent-popup-overlay" onClick={() => setConsentModal(null)}>
+                    <div className="consent-popup" onClick={e => e.stopPropagation()}>
+                        <div className="consent-popup-header">
+                            <h3>{consentModal.title}</h3>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConsentModal(null)} aria-label="닫기">✕</button>
+                        </div>
+                        <div className="consent-popup-body">{consentModal.body}</div>
+                        <div className="consent-popup-footer">
+                            <button type="button" className="btn btn-primary" onClick={() => setConsentModal(null)}>확인</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

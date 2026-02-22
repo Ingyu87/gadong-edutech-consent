@@ -677,6 +677,14 @@ tr:hover td {
   color: var(--gray-900);
 }
 
+.consent-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .consent-card-meta {
   font-size: 0.82rem;
   color: var(--gray-500);
@@ -753,6 +761,69 @@ tr:hover td {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* ===== 동의 내용 팝업 (폰에서 보기 쉬움) ===== */
+.consent-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.consent-popup {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 480px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.consent-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--gray-200);
+  flex-shrink: 0;
+}
+
+.consent-popup-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gray-800);
+  margin: 0;
+  padding-right: 8px;
+}
+
+.consent-popup-body {
+  padding: 20px;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--gray-700);
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+  min-height: 120px;
+}
+
+.consent-popup-footer {
+  padding: 12px 20px 20px;
+  border-top: 1px solid var(--gray-100);
+  flex-shrink: 0;
+}
+
+.consent-popup-footer .btn {
+  width: 100%;
 }
 
 /* ===== Responsive ===== */

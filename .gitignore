@@ -30,13 +30,18 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
+# env files — API 키·비밀값 절대 푸시 금지 (GitHub에 올리지 마세요)
 .env
+.env.*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 !.env.local.example
+# Backup/secret patterns
+*.env.backup
+*.env.bak
+.env.local.*
 
 # vercel
 .vercel
