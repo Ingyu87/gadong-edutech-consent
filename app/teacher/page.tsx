@@ -451,14 +451,12 @@ export default function TeacherPage() {
                                             const isExpanded = expandedStudentId === c.id;
                                             const swList = classConfig.registrySoftwares || classConfig.selectedSoftwares || [];
                                             let agreedSlots = 0;
-                                            let totalSlots = 0;
                                             swList.forEach(sw => {
                                                 const r = normalizeResp(c.responses[sw.id]);
-                                                if (r.agree !== undefined) { totalSlots++; if (r.agree === true) agreedSlots++; }
-                                                if (r.collectionUse !== undefined) { totalSlots++; if (r.collectionUse === true) agreedSlots++; }
-                                                if (r.thirdParty !== undefined) { totalSlots++; if (r.thirdParty === true) agreedSlots++; }
+                                                if (r.collectionUse === true) agreedSlots++;
+                                                if (r.thirdParty === true) agreedSlots++;
                                             });
-                                            if (totalSlots === 0) totalSlots = swList.length * 3;
+                                            const totalSlots = swList.length * 2;
 
                                             return (
                                                 <Fragment key={c.id}>
@@ -502,7 +500,6 @@ export default function TeacherPage() {
                                                                                     <div key={sw.id} style={{ padding: '10px 12px', background: 'white', borderRadius: 8, border: '1px solid var(--gray-100)', fontSize: '0.82rem' }}>
                                                                                         <div style={{ fontWeight: 600, marginBottom: 6 }}>{sw.name}</div>
                                                                                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.78rem' }}>
-                                                                                            <span>{r.agree === true ? '✅' : r.agree === false ? '❌' : '—'} 기본</span>
                                                                                             <span>{r.collectionUse === true ? '✅' : r.collectionUse === false ? '❌' : '—'} 수집이용</span>
                                                                                             <span>{r.thirdParty === true ? '✅' : r.thirdParty === false ? '❌' : '—'} 제3자제공</span>
                                                                                         </div>
