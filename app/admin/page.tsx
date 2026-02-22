@@ -404,46 +404,6 @@ export default function AdminPage() {
                         {/* DASHBOARD */}
                         {tab === 'dashboard' && (
                             <div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
-                                    <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
-                                        <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)', marginBottom: 8 }}>전체 등록 에듀테크(중복제외)</p>
-                                        <p style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--primary)' }}>
-                                            {(() => {
-                                                const all = new Set<string>();
-                                                classes.forEach(c => (c.registrySoftwares || c.selectedSoftwares || []).forEach(s => all.add(s.name.trim().toLowerCase())));
-                                                return all.size;
-                                            })()}개
-                                        </p>
-                                    </div>
-                                    <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
-                                        <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)', marginBottom: 8 }}>학운위 심의 완료(일치)</p>
-                                        <p style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--success)' }}>
-                                            {(() => {
-                                                const all = new Set<string>();
-                                                classes.forEach(c => (c.registrySoftwares || c.selectedSoftwares || []).forEach(s => {
-                                                    if (smcList.some(sm => smcMatch(sm.softwareName, s.name))) {
-                                                        all.add(s.name.trim().toLowerCase());
-                                                    }
-                                                }));
-                                                return all.size;
-                                            })()}개
-                                        </p>
-                                    </div>
-                                    <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
-                                        <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)', marginBottom: 8 }}>심의 정보 확인 필요</p>
-                                        <p style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--danger)' }}>
-                                            {(() => {
-                                                const all = new Set<string>();
-                                                classes.forEach(c => (c.registrySoftwares || c.selectedSoftwares || []).forEach(s => {
-                                                    if (!smcList.some(sm => smcMatch(sm.softwareName, s.name))) {
-                                                        all.add(s.name.trim().toLowerCase());
-                                                    }
-                                                }));
-                                                return all.size;
-                                            })()}개
-                                        </p>
-                                    </div>
-                                </div>
                                 <div className="card" style={{ marginBottom: selectedClass ? 16 : 0 }}>
                                     <p className="card-title">📊 학년/반별 현황 <span style={{ fontWeight: 400, fontSize: '0.8rem', color: 'var(--gray-400)' }}>— 행 클릭 시 상세보기</span></p>
                                     {classes.length === 0 ? (
