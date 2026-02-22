@@ -507,7 +507,7 @@ export default function AdminPage() {
                                                             <table>
                                                                 <thead>
                                                                     <tr>
-                                                                        <th>상태</th><th>소프트웨어명</th><th style={{ textAlign: 'right' }}>관리</th>
+                                                                        <th style={{ whiteSpace: 'nowrap' }}>심의 승인</th><th>소프트웨어명</th><th style={{ textAlign: 'right' }}>관리</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -516,7 +516,13 @@ export default function AdminPage() {
                                                                         return (
                                                                             <Fragment key={sw.id}>
                                                                                 <tr>
-                                                                                    <td style={{ textAlign: 'center' }}>{approved ? '✅' : '⚠️'}</td>
+                                                                                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap', fontSize: '0.78rem' }}>
+                                                                                        {approved ? (
+                                                                                            <span style={{ color: '#2e7d32' }}>✅ 승인됨</span>
+                                                                                        ) : (
+                                                                                            <span style={{ color: 'var(--warning)' }}>⚠️ 확인 필요</span>
+                                                                                        )}
+                                                                                    </td>
                                                                                     <td>
                                                                                         <div style={{ fontWeight: 700 }}>{sw.name || '(이름 없음)'}</div>
                                                                                         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
