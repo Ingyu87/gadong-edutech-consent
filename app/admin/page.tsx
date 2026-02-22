@@ -1,0 +1,522 @@
+'use client';
+
+import { useEffect, useState, useRef, Fragment } from 'react';
+import { useRouter } from 'next/navigation';
+import { getClasses, getConsents, getSmcRecords, addSmcRecord, deleteSmcRecord, upsertClass } from '@/lib/db';
+import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord } from '@/lib/types';
+import { storage, db } from '@/lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, getDocs, doc, setDoc, writeBatch } from 'firebase/firestore';
+import Papa from 'papaparse';
+
+type Tab = 'dashboard' | 'smc';
+
+export default function AdminPage() {
+    const router = useRouter();
+    const [schoolName, setSchoolName] = useState('');
+    const [schoolId, setSchoolId] = useState('');
+    const [tab, setTab] = useState<Tab>('dashboard');
+    const [classes, setClasses] = useState<ClassConfig[]>([]);
+    const [smcList, setSmcList] = useState<SmcRecord[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [smcInput, setSmcInput] = useState('');
+    const pdfFileRef = useRef<HTMLInputElement>(null);
+
+    const [ocrResults, setOcrResults] = useState<string[]>([]);
+    const [ocrLoading, setOcrLoading] = useState(false);
+    const [ocrDocUrl, setOcrDocUrl] = useState('');
+    const [smcSearch, setSmcSearch] = useState('');
+
+    const [selectedClass, setSelectedClass] = useState<ClassConfig | null>(null);
+    const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
+    const [classConsents, setClassConsents] = useState<ConsentRecord[]>([]);
+    const [classConsentsLoading, setClassConsentsLoading] = useState(false);
+    const [showTop, setShowTop] = useState(false);
+
+    useEffect(() => {
+        const id = sessionStorage.getItem('schoolId');
+        const name = sessionStorage.getItem('schoolName');
+        const auth = sessionStorage.getItem('adminAuth');
+        if (!id || !name || auth !== 'true') { router.replace('/role'); return; }
+        setSchoolId(id);
+        setSchoolName(name);
+        loadData(id);
+
+        const handleScroll = () => setShowTop(window.scrollY > 400);
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [router]);
+
+    const loadData = async (id: string) => {
+        setLoading(true);
+        const [cls, smc] = await Promise.all([getClasses(id), getSmcRecords(id)]);
+        setClasses(cls);
+        setSmcList(smc);
+        setLoading(false);
+    };
+
+    const loadClassDetail = async (cls: ClassConfig) => {
+        if (selectedClass?.id === cls.id) {
+            setSelectedClass(null);
+            setClassConsents([]);
+            return;
+        }
+        setSelectedClass(cls);
+        setClassConsentsLoading(true);
+        const consents = await getConsents(cls.id);
+        setClassConsents(consents);
+        setClassConsentsLoading(false);
+    };
+
+    const smcMatch = (smcName: string, swName: string) =>
+        smcName.trim().toLowerCase() === swName.trim().toLowerCase();
+
+    const maskName = (name: string) => {
+        if (!name || name.length < 2) return name;
+        if (name.length === 2) return name[0] + '*';
+        return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1];
+    };
+
+    const handleManualApprove = async (swName: string) => {
+        if (!confirm(`'${swName}'을(를) 심의 상시 승인 처리하시겠습니까?\n(심의 완료 목록에 이 이름으로 추가됩니다.)`)) return;
+        await addSmcRecord({ schoolId, softwareName: swName.trim(), privacyUrl: '', approvedDate: new Date(), documentUrl: '' });
+        loadData(schoolId);
+        alert('승인 처리되었습니다.');
+    };
+
+    const handleApproveAll = async (softwares: SoftwareItem[]) => {
+        const pending = softwares.filter(s => !smcList.some(sm => smcMatch(sm.softwareName, s.name)));
+        if (pending.length === 0) return;
+        if (!confirm(`미승인 항목 ${pending.length}개를 모두 일괄 승인하시겠습니까?`)) return;
+
+        const batch = writeBatch(db);
+        pending.forEach(s => {
+            const newDocRef = doc(collection(db, 'smc_records'));
+            batch.set(newDocRef, {
+                schoolId,
+                softwareName: s.name.trim(),
+                privacyUrl: s.privacyUrl || '',
+                approvedDate: new Date(),
+                documentUrl: '',
+            });
+        });
+        await batch.commit();
+        await loadData(schoolId);
+        alert('일괄 승인 처리되었습니다.');
+    };
+
+    // ---- SMC Manual Add ----
+    const handleAddSmc = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!smcInput.trim()) return;
+        await addSmcRecord({ schoolId, softwareName: smcInput.trim(), privacyUrl: '', approvedDate: new Date(), documentUrl: ocrDocUrl });
+        setSmcInput('');
+        loadData(schoolId);
+    };
+
+    const handleDeleteSmc = async (id: string) => {
+        if (!confirm('삭제하시겠습니까?')) return;
+        await deleteSmcRecord(id);
+        loadData(schoolId);
+    };
+
+
+    // ---- PDF Upload + OCR ----
+    const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setOcrLoading(true);
+        setOcrResults([]);
+        try {
+            const path = `schools/${schoolId}/smc_docs/${Date.now()}_${file.name}`;
+            const sRef = storageRef(storage, path);
+            await uploadBytes(sRef, file);
+            const downloadUrl = await getDownloadURL(sRef);
+            setOcrDocUrl(downloadUrl);
+
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch('/api/ocr', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.softwares?.length > 0) {
+                setOcrResults(data.softwares.map((s: { name: string }) => s.name));
+            } else {
+                alert('소프트웨어명을 자동 추출하지 못했습니다. 수동으로 입력해 주세요.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('파일 업로드 또는 OCR 처리 중 오류가 발생했습니다.');
+        } finally {
+            setOcrLoading(false);
+        }
+    };
+
+    const handleSaveOcrResults = async () => {
+        const toSave = ocrResults.filter(n => n.trim());
+        const existingNames = new Set(smcList.map(s => s.softwareName.trim()));
+        const newItems = toSave.filter(n => !existingNames.has(n.trim()));
+        const dupCount = toSave.length - newItems.length;
+        for (const name of newItems) {
+            await addSmcRecord({ schoolId, softwareName: name.trim(), privacyUrl: '', approvedDate: new Date(), documentUrl: ocrDocUrl });
+        }
+        setOcrResults([]);
+        setOcrDocUrl('');
+        if (pdfFileRef.current) pdfFileRef.current.value = '';
+        loadData(schoolId);
+        alert(`${newItems.length}개 등록완료.${dupCount > 0 ? ` (중복 ${dupCount}개 제외)` : ''}`);
+    };
+
+    const handleResetAllSmc = async () => {
+        if (!confirm('심의 완료 목록을 모두 비울까요? 이 작업은 되돌릴 수 없습니다.')) return;
+        const { query, collection, where, getDocs, writeBatch } = await import('firebase/firestore');
+        const q = query(collection(db, 'smc_records'), where('schoolId', '==', schoolId));
+        const snap = await getDocs(q);
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        await loadData(schoolId);
+        alert('심의 목록이 초기화되었습니다.');
+    };
+
+    const handleResetTeacherPin = async (cls: ClassConfig) => {
+        const newPin = prompt('새로운 4자리 비밀번호를 입력해 주세요 (숫자만):', cls.pin);
+        if (!newPin || newPin.length !== 4 || isNaN(Number(newPin))) {
+            if (newPin) alert('올바른 4자리 숫자를 입력해 주세요.');
+            return;
+        }
+        const { upsertClass } = await import('@/lib/db');
+        await upsertClass({ ...cls, pin: newPin }, cls.id);
+        setClasses(prev => prev.map(c => c.id === cls.id ? { ...c, pin: newPin } : c));
+        setSelectedClass({ ...cls, pin: newPin });
+        alert('비밀번호가 변경되었습니다.');
+    };
+
+    const handleDeleteClassAction = async (clsId: string) => {
+        if (!confirm('⚠️ 경고: 이 학급 설정을 삭제하시겠습니까? \n\n삭제 시 학부모들이 동의를 새로 제출해야 할 수 있으며, 이 작업은 되돌릴 수 없습니다.')) return;
+        const { deleteClass } = await import('@/lib/db');
+        await deleteClass(clsId);
+        setSelectedClass(null);
+        setClasses(prev => prev.filter(c => c.id !== clsId));
+        alert('학급이 삭제되었습니다.');
+    };
+
+    const logout = () => { sessionStorage.removeItem('adminAuth'); router.push('/role'); };
+
+    return (
+        <div className="app-shell">
+            <header className="header">
+                <div className="header-logo"><span>🏫</span>에듀테크 개인정보 동의 시스템</div>
+                {schoolName && <span className="header-school">{schoolName}</span>}
+                <span className="header-mode-badge badge-admin">관리자</span>
+                <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={logout}>로그아웃</button>
+            </header>
+            <main className="main-content" style={{ maxWidth: 960 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid var(--gray-200)' }}>
+                    {([['dashboard', '📊 현황'], ['smc', '✅ 학운위 심의']] as [Tab, string][]).map(([key, label]) => (
+                        <button key={key} className="btn btn-ghost btn-sm"
+                            style={{ borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0', borderBottom: tab === key ? '2px solid var(--primary)' : 'none', color: tab === key ? 'var(--primary)' : 'var(--gray-600)', fontWeight: tab === key ? 700 : 400, background: tab === key ? 'var(--primary-light)' : 'transparent' }}
+                            onClick={() => setTab(key as Tab)}>{label}</button>
+                    ))}
+                </div>
+
+                {loading ? <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" /></div> : (
+                    <>
+                        {/* DASHBOARD */}
+                        {tab === 'dashboard' && (
+                            <div>
+                                <div className="card" style={{ marginBottom: selectedClass ? 16 : 0 }}>
+                                    <p className="card-title">📊 학년/반별 현황 <span style={{ fontWeight: 400, fontSize: '0.8rem', color: 'var(--gray-400)' }}>— 행 클릭 시 상세보기</span></p>
+                                    {classes.length === 0 ? (
+                                        <p style={{ color: 'var(--gray-400)', textAlign: 'center', padding: '20px 0' }}>등록된 학급이 없습니다.</p>
+                                    ) : (
+                                        <div className="table-wrapper">
+                                            <table>
+                                                <thead><tr><th>학년</th><th>반</th><th>담임교사</th><th>활성화</th><th>SW 수</th><th>심의여부 확인</th></tr></thead>
+                                                <tbody>
+                                                    {classes.sort((a, b) => a.year - b.year || a.classNum - b.classNum).map(cls => {
+                                                        const swList = cls.registrySoftwares || cls.selectedSoftwares || [];
+                                                        const nonSmc = swList.filter(s => !smcList.some(sm => smcMatch(sm.softwareName, s.name))) || [];
+                                                        const isSelected = selectedClass?.id === cls.id;
+                                                        return (
+                                                            <tr key={cls.id}
+                                                                onClick={() => loadClassDetail(cls)}
+                                                                style={{ cursor: 'pointer', background: isSelected ? 'var(--primary-light)' : undefined }}>
+                                                                <td>{cls.year}학년</td><td>{cls.classNum}반</td><td>{maskName(cls.teacherName)}</td>
+                                                                <td>{cls.isActive ? <span className="badge badge-smc">✅ 활성</span> : <span className="badge badge-no-smc">미설정</span>}</td>
+                                                                <td>{(cls.registrySoftwares || cls.selectedSoftwares || []).length}개</td>
+                                                                <td>{nonSmc.length > 0 ? <span className="badge badge-no-smc">⚠️ {nonSmc.map(s => s.name).join(', ')}</span> : <span className="badge badge-smc">없음</span>}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Class Detail Panel */}
+                                {selectedClass && (
+                                    <div className="card">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                            <div style={{ flex: 1 }}>
+                                                <p className="card-title" style={{ marginBottom: 4 }}>🔍 {selectedClass.year}학년 {selectedClass.classNum}반 — {maskName(selectedClass.teacherName)} 선생님</p>
+                                                <div style={{ display: 'flex', gap: 12 }}>
+                                                    <button className="btn btn-ghost" style={{ padding: '0 4px', fontSize: '0.75rem', height: 20 }}
+                                                        onClick={() => handleResetTeacherPin(selectedClass)}>🔑 비번 재설정</button>
+                                                    <button className="btn btn-ghost" style={{ padding: '0 4px', fontSize: '0.75rem', height: 20, color: 'var(--danger)' }}
+                                                        onClick={() => handleDeleteClassAction(selectedClass.id)}>🗑️ 학급 삭제</button>
+                                                </div>
+                                            </div>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedClass(null); setClassConsents([]); }}>✕ 닫기</button>
+                                        </div>
+
+                                        {/* Software list */}
+                                        {(() => {
+                                            const swList = selectedClass.registrySoftwares || selectedClass.selectedSoftwares || [];
+                                            const hasPending = swList.some(sw => !smcList.some(sm => smcMatch(sm.softwareName, sw.name)));
+                                            return (
+                                                <>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                        <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 0 }}>📱 에듀테크 목록 ({swList.length}개)</p>
+                                                        {hasPending && (
+                                                            <button className="btn btn-primary btn-sm" onClick={() => handleApproveAll(swList)}>
+                                                                🚀 미승인 항목 일괄 승인
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {swList.length === 0 ? (
+                                                        <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>등록된 소프트웨어 없음</p>
+                                                    ) : (
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                                                            {swList.map(sw => {
+                                                                const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
+                                                                return (
+                                                                    <div key={sw.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, background: approved ? '#e8f5e9' : '#fff3e0', border: `1px solid ${approved ? '#a5d6a7' : '#ffcc80'}`, fontSize: '0.85rem' }}>
+                                                                        <span>{approved ? '✅' : '⚠️'}</span>
+                                                                        <span style={{ fontWeight: 600 }}>{sw.name}</span>
+                                                                        {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" title="사이트" style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>🌐</a>}
+                                                                        {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" title="약관" style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>📄</a>}
+                                                                        {!approved && (
+                                                                            <button className="btn btn-primary btn-sm"
+                                                                                style={{ marginLeft: 4, height: 22, padding: '0 6px', fontSize: '0.7rem' }}
+                                                                                onClick={(e) => { e.stopPropagation(); handleManualApprove(sw.name); }}>
+                                                                                ✅ 승인
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+
+                                        {/* Consent summary */}
+                                        <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 8 }}>📋 학부모 동의 현황 ({classConsents.length}명 제출)</p>
+                                        {classConsentsLoading ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><div className="spinner" style={{ width: 18, height: 18 }} /><span style={{ color: 'var(--gray-500)', fontSize: '0.85rem' }}>불러오는 중...</span></div>
+                                        ) : classConsents.length === 0 ? (
+                                            <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem' }}>아직 제출된 동의서가 없습니다.</p>
+                                        ) : (
+                                            <div>
+                                                {/* Per-software summary */}
+                                                <div style={{ maxHeight: 240, overflowY: 'auto', marginBottom: 20, padding: 2, border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-md)', background: 'var(--gray-50)' }}>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 10 }}>
+                                                        {(selectedClass.registrySoftwares || selectedClass.selectedSoftwares || []).map(sw => {
+                                                            const agree = classConsents.filter(c => c.responses[sw.id] === true);
+                                                            const disagree = classConsents.filter(c => c.responses[sw.id] === false);
+                                                            const pending = classConsents.filter(c => c.responses[sw.id] == null);
+                                                            return (
+                                                                <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 180, background: 'white' }}>
+                                                                    <p style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 6 }}>{sw.name}</p>
+                                                                    <div style={{ fontSize: '0.8rem', lineHeight: 1.9 }}>
+                                                                        <span style={{ color: '#2e7d32' }}>✅ 동의 {agree.length}명</span><br />
+                                                                        <span style={{ color: 'var(--danger)' }}>❌ 비동의 {disagree.length}명</span>
+                                                                        {disagree.length > 0 && <span style={{ color: 'var(--danger)', fontSize: '0.75rem' }}> ({disagree.map(c => maskName(c.studentName)).join(', ')})</span>}
+                                                                        <br />
+                                                                        <span style={{ color: 'var(--gray-400)' }}>— 미응답 {pending.length}명</span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                {/* Student detail table */}
+                                                <div className="table-wrapper">
+                                                    <table>
+                                                        <thead>
+                                                            <tr>
+                                                                <th>번호</th><th>학생</th><th>학부모</th>
+                                                                <th style={{ textAlign: 'center' }}>코드</th>
+                                                                <th>동의 현황</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {classConsents.sort((a, b) => a.studentNumber - b.studentNumber).map(c => {
+                                                                const isExpanded = expandedStudentId === c.id;
+                                                                const swList = selectedClass.registrySoftwares || selectedClass.selectedSoftwares || [];
+                                                                const agreed = Object.values(c.responses).filter(v => v === true).length;
+
+                                                                return (
+                                                                    <Fragment key={c.id}>
+                                                                        <tr
+                                                                            onClick={() => setExpandedStudentId(isExpanded ? null : c.id)}
+                                                                            style={{ cursor: 'pointer', background: isExpanded ? 'var(--primary-light)' : undefined }}
+                                                                        >
+                                                                            <td>{c.studentNumber}번</td>
+                                                                            <td style={{ fontWeight: 700 }}>{maskName(c.studentName)}</td>
+                                                                            <td>{maskName(c.parentName)}</td>
+                                                                            <td style={{ textAlign: 'center' }}>
+                                                                                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)', letterSpacing: 1, fontSize: '0.82rem' }}>
+                                                                                    {c.confirmationCode || '—'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td>
+                                                                                <span className="badge badge-smc" style={{ fontSize: '0.75rem' }}>
+                                                                                    {agreed} / {swList.length} 동의
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                        {isExpanded && (
+                                                                            <tr>
+                                                                                <td colSpan={5} style={{ padding: '0 20px 20px', background: 'var(--gray-50)' }}>
+                                                                                    <div className="card" style={{ marginTop: 10, border: '1px solid var(--gray-200)', padding: 16 }}>
+                                                                                        <p style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                                                            📋 {maskName(c.studentName)} 학생의 상세 동의 내역
+                                                                                        </p>
+                                                                                        <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+                                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+                                                                                                {swList.map(sw => {
+                                                                                                    const resp = c.responses[sw.id];
+                                                                                                    return (
+                                                                                                        <div key={sw.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'white', border: '1px solid var(--gray-100)', borderRadius: 8, fontSize: '0.82rem' }}>
+                                                                                                            <span>{resp === true ? '✅' : resp === false ? '❌' : '—'}</span>
+                                                                                                            <span style={{ fontWeight: 600, flex: 1 }}>{sw.name}</span>
+                                                                                                        </div>
+                                                                                                    );
+                                                                                                })}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        )}
+                                                                    </Fragment>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* SMC */}
+                        {tab === 'smc' && (
+                            <div>
+                                {/* PDF OCR */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <p className="card-title">📄 학운위 심의안 PDF 업로드 (제품명 자동 추출)</p>
+                                    <div className="alert alert-info" style={{ marginBottom: 14 }}>
+                                        <span>🤖</span>
+                                        <span>PDF를 업로드하면 AI가 소프트웨어명만 추출합니다. 추출 후 확인하고 저장하세요.</span>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">심의안 PDF 선택</label>
+                                        <input ref={pdfFileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="form-control"
+                                            style={{ padding: 8 }} onChange={handlePdfUpload} disabled={ocrLoading} />
+                                    </div>
+                                    {ocrLoading && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
+                                            <div className="spinner" style={{ width: 20, height: 20 }} />
+                                            <span style={{ color: 'var(--gray-600)', fontSize: '0.9rem' }}>AI가 소프트웨어명을 추출 중...</span>
+                                        </div>
+                                    )}
+                                    {ocrResults.length > 0 && (
+                                        <div style={{ marginTop: 16 }}>
+                                            <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 10 }}>
+                                                ✅ 추출된 소프트웨어 ({ocrResults.length}개) — 수정 후 등록하세요
+                                            </p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
+                                                {ocrResults.map((name, i) => (
+                                                    <div key={i} style={{ display: 'flex', gap: 8 }}>
+                                                        <input className="form-control" value={name}
+                                                            onChange={e => setOcrResults(prev => prev.map((n, j) => j === i ? e.target.value : n))} />
+                                                        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', flexShrink: 0 }}
+                                                            onClick={() => setOcrResults(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                                                <button className="btn btn-success" onClick={handleSaveOcrResults}>💾 심의 목록에 등록</button>
+                                                <button className="btn btn-ghost" onClick={() => { setOcrResults([]); if (pdfFileRef.current) pdfFileRef.current.value = ''; }}>취소</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Manual */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <p className="card-title">✍️ 수동 등록</p>
+                                    <form onSubmit={handleAddSmc}>
+                                        <div style={{ display: 'flex', gap: 10 }}>
+                                            <input className="form-control" placeholder="소프트웨어명" value={smcInput}
+                                                onChange={e => setSmcInput(e.target.value)} required />
+                                            <button type="submit" className="btn btn-success">+ 추가</button>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                <div className="card">
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <p className="card-title" style={{ marginBottom: 0 }}>심의 완료 목록 ({smcList.length}개)</p>
+                                            {smcList.length > 0 && (
+                                                <button className="btn btn-danger btn-sm" onClick={handleResetAllSmc}>
+                                                    🗑️ 전체 초기화
+                                                </button>
+                                            )}
+                                        </div>
+                                        <input className="form-control" placeholder="제품명 검색..." value={smcSearch}
+                                            onChange={e => setSmcSearch(e.target.value)} />
+                                    </div>
+                                    {smcList.length === 0 ? (
+                                        <p style={{ color: 'var(--gray-400)', textAlign: 'center', padding: '16px 0' }}>등록된 심의 소프트웨어가 없습니다.</p>
+                                    ) : (
+                                        <div className="table-wrapper">
+                                            <table>
+                                                <thead><tr><th>소프트웨어명</th><th style={{ textAlign: 'right' }}>관리</th></tr></thead>
+                                                <tbody>
+                                                    {smcList.filter(s => s.softwareName.toLowerCase().includes(smcSearch.toLowerCase())).map(s => (
+                                                        <tr key={s.id}>
+                                                            <td><span className="badge badge-smc">✅</span> {s.softwareName}</td>
+                                                            <td style={{ textAlign: 'right' }}>
+                                                                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }}
+                                                                    onClick={() => { if (confirm('이 항목을 삭제할까요?')) deleteSmcRecord(s.id).then(() => loadData(schoolId)); }}>
+                                                                    ✕
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                    </>
+                )}
+            </main>
+
+            <button className={`btn-top ${showTop ? 'visible' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                ↑
+            </button>
+        </div>
+    );
+}
