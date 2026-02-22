@@ -369,7 +369,7 @@ export default function AdminPage() {
                                                                                                                 <span>{r.thirdParty === true ? '✅' : r.thirdParty === false ? '❌' : '—'} 제3자제공</span>
                                                                                                             </div>
                                                                                                         </div>
-                                                                                                    );
+                                                                    );
                                                                                                 })}
                                                                                             </div>
                                                                                         </div>

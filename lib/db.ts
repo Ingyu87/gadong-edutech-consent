@@ -68,6 +68,7 @@ export async function getClass(classId: string): Promise<ClassConfig | null> {
     if (!snap.exists()) return null;
     const data = snap.data();
     const cls = { id: snap.id, ...data } as ClassConfig;
+    // Ensure arrays when present (Firestore can return non-array)
     if (cls.registrySoftwares != null && !Array.isArray(cls.registrySoftwares)) cls.registrySoftwares = [];
     if (cls.selectedSoftwares != null && !Array.isArray(cls.selectedSoftwares)) cls.selectedSoftwares = [];
     return cls;

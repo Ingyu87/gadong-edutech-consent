@@ -864,6 +864,7 @@ tr:hover td {
   }
 }
 
+/* 학부모 동의 카드·버튼: 터치 영역 44px 이상 */
 @media (max-width: 768px) {
   .consent-list-container {
     gap: 14px;
@@ -913,6 +914,7 @@ tr:hover td {
   }
 }
 
+/* 동의 내용 팝업: 모바일에서 전체 화면 */
 @media (max-width: 768px) {
   .consent-popup-overlay {
     padding: 0;
@@ -954,7 +956,9 @@ tr:hover td {
   }
 }
 
+/* 제출·일괄동의 버튼: 모바일 터치 영역 */
 @media (max-width: 768px) {
+
   .btn-block,
   .main-content .btn-primary.btn-block {
     min-height: 48px;
@@ -964,6 +968,7 @@ tr:hover td {
   }
 }
 
+/* 상단 이동 버튼: safe area */
 @media (max-width: 768px) {
   .btn-top {
     right: max(16px, env(safe-area-inset-right));
@@ -974,7 +979,9 @@ tr:hover td {
   }
 }
 
+/* 학부모 로그인: 학교/반/정보 입력 터치 영역 */
 @media (max-width: 768px) {
+
   .main-content .btn-outline.btn-block,
   .main-content .btn-ghost {
     min-height: 48px;
@@ -987,6 +994,7 @@ tr:hover td {
   .form-select {
     min-height: 48px;
     font-size: 16px;
+    /* iOS zoom 방지 */
   }
 
   .pin-digit {

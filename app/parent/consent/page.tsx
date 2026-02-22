@@ -120,6 +120,7 @@ export default function ParentConsentPage() {
         const newCode = confirmationCode || generateCode();
         setConfirmationCode(newCode);
 
+        // 기본동의는 화면에서 묻지 않으므로 제출 시 모두 true로 저장
         const responsesToSave: Record<string, ConsentResponse> = {};
         Object.keys(responses).forEach(swId => {
             const r = responses[swId] || { agree: null, collectionUse: null, thirdParty: null };
@@ -143,23 +144,23 @@ export default function ParentConsentPage() {
     const smcMatch = (smcName: string, swName: string) =>
         smcName.trim().toLowerCase() === swName.trim().toLowerCase();
 
+    // 교사가 CSV로 등록한 목록(registrySoftwares) 우선, 없으면 선택 목록(selectedSoftwares) 사용
     const reg = Array.isArray(classConfig?.registrySoftwares) ? classConfig!.registrySoftwares : [];
     const sel = Array.isArray(classConfig?.selectedSoftwares) ? classConfig!.selectedSoftwares : [];
     const swList = reg.length > 0 ? reg : sel;
-    let totalSlots = 0;
-    let answeredSlots = 0;
-    let agreedSlots = 0;
+    // 수집·이용 N개, 제3자 N개로 구분 (에듀테크 50개면 50+50이지 150이 아님)
+    const N = swList.length;
+    let collectionUseAnswered = 0;
+    let collectionUseAgreed = 0;
+    let thirdPartyAnswered = 0;
+    let thirdPartyAgreed = 0;
     swList.forEach(sw => {
         const r = responses[sw.id] || { agree: null, collectionUse: null, thirdParty: null };
-        [r.collectionUse, r.thirdParty].forEach(v => {
-            totalSlots++;
-            if (v !== null) answeredSlots++;
-            if (v === true) agreedSlots++;
-        });
+        if (r.collectionUse !== null) { collectionUseAnswered++; if (r.collectionUse === true) collectionUseAgreed++; }
+        if (r.thirdParty !== null) { thirdPartyAnswered++; if (r.thirdParty === true) thirdPartyAgreed++; }
     });
-    const totalCount = totalSlots;
-    const answeredCount = answeredSlots;
-    const agreedCount = agreedSlots;
+    const totalAnswered = collectionUseAnswered + thirdPartyAnswered;
+    const totalSlots = N * 2;
 
     if (!loaded) return (
         <div className="app-shell">
@@ -193,7 +194,7 @@ export default function ParentConsentPage() {
                         {get('parentStudentName')} 학생 ({get('parentName')} 학부모님)
                     </p>
                     <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>
-                        총 {totalCount}개 항목 중 <strong>{agreedCount}개 동의</strong>
+                        에듀테크 {N}개 · 수집·이용 {collectionUseAgreed}/{N}, 제3자 {thirdPartyAgreed}/{N} 동의 완료
                     </p>
                     <div className="alert alert-warning" style={{ textAlign: 'left', marginBottom: 12 }}>
                         <span>📝</span>
@@ -232,8 +233,8 @@ export default function ParentConsentPage() {
                 {/* Progress Bar */}
                 <div className="progress-bar-sticky" style={{ position: 'sticky', top: 60, zIndex: 90, background: 'var(--gray-50)', padding: '12px 0 20px', margin: '0 -4px' }}>
                     <div className="progress-bar-wrap" style={{ position: 'relative' }}>
-                        <div className="progress-bar" style={{ width: `${(answeredCount / (totalCount || 1)) * 100}%` }} />
-                        <span className="progress-text">에듀테크 {swList.length}개 · {answeredCount}/{totalCount} 항목 완료</span>
+                        <div className="progress-bar" style={{ width: `${(totalAnswered / (totalSlots || 1)) * 100}%` }} />
+                        <span className="progress-text">수집·이용 {collectionUseAnswered}/{N} · 제3자 {thirdPartyAnswered}/{N} 완료</span>
                     </div>
                 </div>
 
@@ -247,7 +248,7 @@ export default function ParentConsentPage() {
                             </p>
                         </div>
                         <div style={{ textAlign: 'right', fontSize: '0.82rem', color: 'var(--gray-500)' }}>
-                            {swList.length}개 중 {answeredCount}/{totalCount} 항목 응답
+                            에듀테크 {N}개 · 수집·이용 {collectionUseAnswered}/{N}, 제3자 {thirdPartyAnswered}/{N} 응답
                         </div>
                     </div>
                 </div>
@@ -358,6 +359,9 @@ export default function ParentConsentPage() {
                     <button className="btn btn-primary btn-block btn-lg" onClick={handleSave} disabled={saving} style={{ marginBottom: 10 }}>
                         {saving ? '제출 중...' : existingConsent ? '수정 제출하기' : '동의 제출하기'}
                     </button>
+                    <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: 4 }}>
+                        수집·이용 {collectionUseAnswered}/{N}개, 제3자 {thirdPartyAnswered}/{N}개 응답 완료 시 제출 가능
+                    </p>
                     <p style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--gray-400)' }}>
                         제출 후 비밀번호로 다시 접속하여 수정 가능합니다.
                     </p>

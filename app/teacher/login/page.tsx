@@ -27,8 +27,12 @@ export default function TeacherLoginPage() {
         e.preventDefault();
         if (!form.year || !form.classNum || !form.teacherName.trim()) return;
         const classes = await getClasses(schoolId);
-        const classId = makeClassId(schoolId, Number(form.year), Number(form.classNum));
-        const found = classes.find(c => c.id === classId);
+        const year = Number(form.year);
+        const classNum = Number(form.classNum);
+        const classId = makeClassId(schoolId, year, classNum);
+        // 문서 id로 먼저 찾고, 없으면 학년+반으로 찾기 (예전에 다른 id로 저장된 학급도 인식)
+        let found = classes.find(c => c.id === classId)
+            || classes.find(c => c.schoolId === schoolId && c.year === year && c.classNum === classNum);
         if (found) {
             setExistingClass(found);
             setIsNew(false);
