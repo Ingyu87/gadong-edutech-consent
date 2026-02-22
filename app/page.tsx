@@ -133,11 +133,10 @@ export default function HomePage() {
                         autoFocus
                         required
                       />
-                      <p className="form-hint">교사 및 학부모 페이지 진입을 위한 보안 코드입니다.</p>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
                       <button type="submit" className="btn btn-primary">확인</button>
-                      <button type="button" className="btn btn-ghost" onClick={() => setSelectedSchoolForCode(null)}>취on
+                      <button type="button" className="btn btn-ghost" onClick={() => setSelectedSchoolForCode(null)}>
                         취소
                       </button>
                     </div>
