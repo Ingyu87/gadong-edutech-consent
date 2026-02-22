@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
-import { getClasses, getConsents, getSmcRecords, addSmcRecord, deleteSmcRecord, upsertClass } from '@/lib/db';
+import { getClasses, getConsents, getSmcRecords, addSmcRecord, deleteSmcRecord, upsertClass, updateSchoolPassword } from '@/lib/db';
 import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
 import { storage, db } from '@/lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -38,6 +38,8 @@ export default function AdminPage() {
     const [classConsentsLoading, setClassConsentsLoading] = useState(false);
     const [showTop, setShowTop] = useState(false);
     const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
+    const [isEditingPw, setIsEditingPw] = useState(false);
+    const [newPw, setNewPw] = useState('');
 
     const pendingSw = useMemo(() => {
         const pendingMap = new Map<string, SoftwareItem>();
@@ -275,7 +277,20 @@ export default function AdminPage() {
     const handleBatchAddSoftwares = async (newItems: SoftwareItem[]) => {
         if (!selectedClass) return;
         const current = selectedClass.registrySoftwares || [];
-        const merged = [...current, ...newItems];
+
+        // Filter out items already in current by name (trim + lowercase)
+        const currentNames = new Set(current.map(s => s.name.trim().toLowerCase()));
+        const uniqueEntries = newItems.filter(item => {
+            if (!item.name) return false;
+            return !currentNames.has(item.name.trim().toLowerCase());
+        });
+
+        if (uniqueEntries.length === 0) {
+            alert('중복된 항목을 제외하고 새로 추가할 항목이 없습니다.');
+            return;
+        }
+
+        const merged = [...current, ...uniqueEntries];
         // Automatically select all
         const updated = {
             ...selectedClass,
@@ -286,7 +301,20 @@ export default function AdminPage() {
         await upsertClass(updated, selectedClass.id);
         setSelectedClass(updated);
         setClasses(prev => prev.map(c => c.id === selectedClass.id ? updated : c));
-        alert(`${newItems.length}개 에듀테크가 해당 학급에 성공적으로 등록되었습니다.`);
+        alert(`${uniqueEntries.length}개 에듀테크가 추가로 등록되었습니다. (중복 ${newItems.length - uniqueEntries.length}개 제외)`);
+    };
+
+    const handleUpdatePw = async () => {
+        if (!newPw.trim()) return;
+        if (!confirm('관리자 비밀번호를 수정하시겠습니까?')) return;
+        try {
+            await updateSchoolPassword(schoolId, newPw.trim());
+            alert('비밀번호가 성공적으로 변경되었습니다. 다음 로그인부터 적용됩니다.');
+            setIsEditingPw(false);
+            setNewPw('');
+        } catch (err) {
+            alert('비밀번호 변경에 실패했습니다.');
+        }
     };
 
     const handleDeleteSoftware = async (swId: string) => {
@@ -307,7 +335,25 @@ export default function AdminPage() {
                 <div className="header-logo"><span>🏫</span>에듀테크 개인정보 동의 시스템</div>
                 {schoolName && <span className="header-school">{schoolName}</span>}
                 <span className="header-mode-badge badge-admin">관리자</span>
-                <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={logout}>로그아웃</button>
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {!isEditingPw ? (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setIsEditingPw(true)}>🔑 비번변경</button>
+                    ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--gray-50)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--gray-200)' }}>
+                            <input
+                                className="form-control"
+                                type="password"
+                                placeholder="새 비밀번호"
+                                style={{ height: 28, width: 100, fontSize: '0.78rem' }}
+                                value={newPw}
+                                onChange={e => setNewPw(e.target.value)}
+                            />
+                            <button className="btn btn-primary btn-sm" style={{ height: 28, padding: '0 8px', fontSize: '0.78rem' }} onClick={handleUpdatePw}>저장</button>
+                            <button className="btn btn-ghost btn-sm" style={{ height: 28, padding: '0 8px', fontSize: '0.78rem' }} onClick={() => { setIsEditingPw(false); setNewPw(''); }}>✕</button>
+                        </div>
+                    )}
+                    <button className="btn btn-ghost btn-sm" onClick={logout}>로그아웃</button>
+                </div>
             </header>
             <main className="main-content" style={{ maxWidth: 960 }}>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid var(--gray-200)' }}>

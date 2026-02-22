@@ -35,6 +35,12 @@ export async function getSchool(schoolId: string): Promise<School | null> {
     return { id: snap.id, ...snap.data() } as School;
 }
 
+export async function updateSchoolPassword(schoolId: string, password: string): Promise<void> {
+    await updateDoc(doc(db, 'schools', schoolId), {
+        adminPassword: password,
+    });
+}
+
 // --- SMC Records ---
 export async function getSmcRecords(schoolId: string): Promise<SmcRecord[]> {
     const q = query(collection(db, 'smc_records'), where('schoolId', '==', schoolId));

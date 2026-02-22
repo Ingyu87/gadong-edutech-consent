@@ -178,7 +178,21 @@ export default function TeacherPage() {
 
     const handleSaveCsv = async () => {
         if (!csvData.length || !classConfig) return;
-        const newRegistry = [...allSoftwares, ...csvData];
+
+        const currentNames = new Set(allSoftwares.map(s => s.name.trim().toLowerCase()));
+        const uniqueNew = csvData.filter(s => {
+            if (!s.name) return false;
+            return !currentNames.has(s.name.trim().toLowerCase());
+        });
+
+        if (uniqueNew.length === 0) {
+            alert('이미 등록된 항목들입니다. 새로 추가할 항목이 없습니다.');
+            setCsvData([]);
+            if (csvFileRef.current) csvFileRef.current.value = '';
+            return;
+        }
+
+        const newRegistry = [...allSoftwares, ...uniqueNew];
         // Automatically select all items and activate the class
         const newSelected = newRegistry.map(s => ({ ...s, isSmcApproved: isSmcApproved(s) }));
         await upsertClass({
@@ -187,8 +201,9 @@ export default function TeacherPage() {
             selectedSoftwares: newSelected,
             isActive: true
         }, classConfig.id);
+
         setClassConfig(prev => prev ? { ...prev, registrySoftwares: newRegistry, selectedSoftwares: newSelected } : null);
-        alert(`${csvData.length}개 소프트웨어가 등록되었으며, 즉시 동의 가능하도록 활성화되었습니다.`);
+        alert(`${uniqueNew.length}개 소프트웨어가 추가로 등록되었습니다. (중복 ${csvData.length - uniqueNew.length}개 제외)`);
         setCsvData([]);
         setAllSoftwares(newRegistry);
         setSelected(newSelected);
