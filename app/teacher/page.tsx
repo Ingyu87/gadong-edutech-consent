@@ -100,6 +100,7 @@ export default function TeacherPage() {
         setSaving(true);
         await upsertClass({
             ...classConfig,
+            registrySoftwares: allSoftwares,
             selectedSoftwares: selected.map(s => ({ ...s, isSmcApproved: isSmcApproved(s) })),
             teacherNote,
             isActive: true,
@@ -183,6 +184,7 @@ export default function TeacherPage() {
             selectedSoftwares: newSelected,
             isActive: true
         }, classConfig.id);
+        setClassConfig(prev => prev ? { ...prev, registrySoftwares: newRegistry, selectedSoftwares: newSelected } : null);
         alert(`${csvData.length}개 소프트웨어가 등록되었으며, 즉시 동의 가능하도록 활성화되었습니다.`);
         setCsvData([]);
         setAllSoftwares(newRegistry);
