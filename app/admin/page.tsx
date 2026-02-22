@@ -11,6 +11,11 @@ import Papa from 'papaparse';
 
 type Tab = 'dashboard' | 'smc';
 
+const smcMatch = (smcName: string, swName: string) => {
+    if (!smcName || !swName) return false;
+    return smcName.trim().toLowerCase() === swName.trim().toLowerCase();
+};
+
 export default function AdminPage() {
     const router = useRouter();
     const [schoolName, setSchoolName] = useState('');
@@ -90,10 +95,6 @@ export default function AdminPage() {
         setClassConsentsLoading(false);
     };
 
-    const smcMatch = (smcName: string, swName: string) => {
-        if (!smcName || !swName) return false;
-        return smcName.trim().toLowerCase() === swName.trim().toLowerCase();
-    };
 
     const maskName = (name: string) => {
         if (!name || name.length < 2) return name;
