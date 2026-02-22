@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
-import { getClass, getSmcRecords, getConsents, upsertClass } from '@/lib/db';
+import { getClass, getSmcRecords, getConsents, upsertClass, removeNoticeFields } from '@/lib/db';
 import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
 import { db, storage } from '@/lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -260,12 +260,15 @@ export default function TeacherPage() {
         if (!confirm('업로드된 가정통신문 파일을 삭제하시겠습니까?')) return;
 
         try {
-            // Firestore update first
-            const updated = { ...classConfig, noticeUrl: undefined, noticeName: undefined };
-            await upsertClass(updated, classConfig.id);
+            const { removeNoticeFields } = await import('@/lib/db');
+            await removeNoticeFields(classConfig.id);
+            const updated = { ...classConfig };
+            delete updated.noticeUrl;
+            delete updated.noticeName;
             setClassConfig(updated);
             alert('파일 정보가 삭제되었습니다.');
         } catch (err) {
+            console.error(err);
             alert('삭제에 실패했습니다.');
         }
     };

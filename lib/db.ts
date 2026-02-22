@@ -11,6 +11,7 @@ import {
     where,
     serverTimestamp,
     deleteDoc,
+    deleteField,
 } from 'firebase/firestore';
 import { School, SmcRecord, ClassConfig, ConsentRecord, SoftwareItem } from './types';
 
@@ -82,6 +83,13 @@ export async function getClass(classId: string): Promise<ClassConfig | null> {
 
 export async function upsertClass(classData: Omit<ClassConfig, 'id'>, classId: string): Promise<void> {
     await setDoc(doc(db, 'classes', classId), classData, { merge: true });
+}
+
+export async function removeNoticeFields(classId: string): Promise<void> {
+    await updateDoc(doc(db, 'classes', classId), {
+        noticeUrl: deleteField(),
+        noticeName: deleteField(),
+    });
 }
 
 // --- Consent Records ---
