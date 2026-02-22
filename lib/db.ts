@@ -60,7 +60,11 @@ export async function getClasses(schoolId: string): Promise<ClassConfig[]> {
 export async function getClass(classId: string): Promise<ClassConfig | null> {
     const snap = await getDoc(doc(db, 'classes', classId));
     if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() } as ClassConfig;
+    const data = snap.data();
+    const cls = { id: snap.id, ...data } as ClassConfig;
+    if (cls.registrySoftwares != null && !Array.isArray(cls.registrySoftwares)) cls.registrySoftwares = [];
+    if (cls.selectedSoftwares != null && !Array.isArray(cls.selectedSoftwares)) cls.selectedSoftwares = [];
+    return cls;
 }
 
 export async function upsertClass(classData: Omit<ClassConfig, 'id'>, classId: string): Promise<void> {

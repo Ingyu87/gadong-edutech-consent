@@ -50,6 +50,10 @@ export default function ParentConsentPage() {
         setClassConfig(cls);
         setSmcList(smc);
 
+        const regList = Array.isArray(cls?.registrySoftwares) ? cls.registrySoftwares : [];
+        const selList = Array.isArray(cls?.selectedSoftwares) ? cls.selectedSoftwares : [];
+        const softList = regList.length > 0 ? regList : selList;
+
         if (existing) {
             const pinOk = existing.pin === pin;
             const studentOk = existing.studentName.trim() === get('parentStudentName').trim();
@@ -63,14 +67,14 @@ export default function ParentConsentPage() {
             setExistingConsent(existing);
             const raw = existing.responses || {};
             const normalized: Record<string, ConsentResponse> = {};
-            (cls?.registrySoftwares || cls?.selectedSoftwares || []).forEach(sw => {
+            softList.forEach(sw => {
                 normalized[sw.id] = normalizeResp(raw[sw.id]);
             });
             setResponses(normalized);
             if (existing.confirmationCode) setConfirmationCode(existing.confirmationCode);
         } else {
             const init: Record<string, ConsentResponse> = {};
-            (cls?.registrySoftwares || cls?.selectedSoftwares || []).forEach(sw => {
+            softList.forEach(sw => {
                 init[sw.id] = { agree: null, collectionUse: null, thirdParty: null };
             });
             setResponses(init);
@@ -90,8 +94,9 @@ export default function ParentConsentPage() {
 
     const handleAgreeAll = () => {
         const all: Record<string, ConsentResponse> = {};
-        const swList = classConfig?.registrySoftwares || classConfig?.selectedSoftwares || [];
-        swList.forEach(sw => {
+        const reg = Array.isArray(classConfig?.registrySoftwares) ? classConfig.registrySoftwares : [];
+        const sel = Array.isArray(classConfig?.selectedSoftwares) ? classConfig.selectedSoftwares : [];
+        (reg.length > 0 ? reg : sel).forEach(sw => {
             all[sw.id] = { agree: true, collectionUse: true, thirdParty: true };
         });
         setResponses(all);
@@ -132,7 +137,9 @@ export default function ParentConsentPage() {
     const smcMatch = (smcName: string, swName: string) =>
         smcName.trim().toLowerCase() === swName.trim().toLowerCase();
 
-    const swList = classConfig?.registrySoftwares || classConfig?.selectedSoftwares || [];
+    const reg = Array.isArray(classConfig?.registrySoftwares) ? classConfig!.registrySoftwares : [];
+    const sel = Array.isArray(classConfig?.selectedSoftwares) ? classConfig!.selectedSoftwares : [];
+    const swList = reg.length > 0 ? reg : sel;
     let totalSlots = 0;
     let answeredSlots = 0;
     let agreedSlots = 0;
@@ -217,7 +224,7 @@ export default function ParentConsentPage() {
             </header>
             <main className="main-content" style={{ maxWidth: 720 }}>
                 {/* Progress Bar */}
-                <div style={{ position: 'sticky', top: 60, zIndex: 90, background: 'var(--gray-50)', padding: '12px 0 20px', margin: '0 -4px' }}>
+                <div className="progress-bar-sticky" style={{ position: 'sticky', top: 60, zIndex: 90, background: 'var(--gray-50)', padding: '12px 0 20px', margin: '0 -4px' }}>
                     <div className="progress-bar-wrap" style={{ position: 'relative' }}>
                         <div className="progress-bar" style={{ width: `${(answeredCount / (totalCount || 1)) * 100}%` }} />
                         <span className="progress-text">{answeredCount} / {totalCount} 완료</span>
@@ -252,7 +259,13 @@ export default function ParentConsentPage() {
 
                 {/* Individual consent (Mobile Cards) - 기본/수집이용/제3자제공 각각 체크 */}
                 <div className="consent-list-container">
-                    {(classConfig.registrySoftwares || classConfig.selectedSoftwares || []).map((sw: SoftwareItem) => {
+                    {swList.length === 0 ? (
+                        <div className="card" style={{ marginBottom: 14, background: 'var(--gray-50)', textAlign: 'center', padding: 24 }}>
+                            <p style={{ fontWeight: 600, color: 'var(--gray-600)', marginBottom: 8 }}>등록된 에듀테크 목록이 없습니다</p>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)' }}>담임 선생님께 에듀테크 목록 등록 여부를 확인해 주세요. 등록 후 다시 접속하면 동의할 목록이 표시됩니다.</p>
+                        </div>
+                    ) : null}
+                    {swList.map((sw: SoftwareItem) => {
                         const r = responses[sw.id] || { agree: null, collectionUse: null, thirdParty: null };
                         const isNew = !responses[sw.id] && existingConsent;
                         const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));

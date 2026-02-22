@@ -277,76 +277,14 @@ export default function AdminPage() {
                                             <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedClass(null); setClassConsents([]); }}>✕ 닫기</button>
                                         </div>
 
-                                        {/* Software list */}
-                                        {(() => {
-                                            const swList = selectedClass.registrySoftwares || selectedClass.selectedSoftwares || [];
-                                            const hasPending = swList.some(sw => !smcList.some(sm => smcMatch(sm.softwareName, sw.name)));
-                                            return (
-                                                <>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                                        <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 0 }}>📱 에듀테크 목록 ({swList.length}개)</p>
-                                                        {hasPending && (
-                                                            <button className="btn btn-primary btn-sm" onClick={() => handleApproveAll(swList)}>
-                                                                🚀 미승인 항목 일괄 승인
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    {swList.length === 0 ? (
-                                                        <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>등록된 소프트웨어 없음</p>
-                                                    ) : (
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                                                            {swList.map(sw => {
-                                                                const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
-                                                                return (
-                                                                    <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 12, overflow: 'hidden', background: 'white' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: approved ? '#f1f8f1' : '#fff9f0' }}>
-                                                                            <span style={{ fontSize: '1.1rem' }}>{approved ? '✅' : '⚠️'}</span>
-                                                                            <span style={{ fontWeight: 700, flex: 1 }}>{sw.name}</span>
-                                                                            <div style={{ display: 'flex', gap: 10 }}>
-                                                                                {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>사이트 ↗</a>}
-                                                                                {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a>}
-                                                                                {!approved && (
-                                                                                    <button className="btn btn-primary btn-sm"
-                                                                                        style={{ height: 26, padding: '0 8px', fontSize: '0.75rem' }}
-                                                                                        onClick={(e) => { e.stopPropagation(); handleManualApprove(sw.name); }}>
-                                                                                        승인 처리
-                                                                                    </button>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                        {(sw.collectionUseConsent || sw.thirdPartyConsent) && (
-                                                                            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'white', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                                                                {sw.collectionUseConsent && (
-                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
-                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 수집·이용 동의`, body: sw.collectionUseConsent! })}>
-                                                                                        📋 수집이용동의 내용
-                                                                                    </button>
-                                                                                )}
-                                                                                {sw.thirdPartyConsent && (
-                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
-                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 제3자 제공 동의`, body: sw.thirdPartyConsent! })}>
-                                                                                        📋 제3자제공동의 내용
-                                                                                    </button>
-                                                                                )}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                </>
-                                            );
-                                        })()}
-
-                                        {/* Consent summary */}
+                                        {/* 학부모 동의 현황 — 먼저 표시 */}
                                         <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 8 }}>📋 학부모 동의 현황 ({classConsents.length}명 제출)</p>
                                         {classConsentsLoading ? (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><div className="spinner" style={{ width: 18, height: 18 }} /><span style={{ color: 'var(--gray-500)', fontSize: '0.85rem' }}>불러오는 중...</span></div>
                                         ) : classConsents.length === 0 ? (
-                                            <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem' }}>아직 제출된 동의서가 없습니다.</p>
+                                            <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 20 }}>아직 제출된 동의서가 없습니다.</p>
                                         ) : (
-                                            <div>
+                                            <div style={{ marginBottom: 24 }}>
                                                 {/* Per-software summary */}
                                                 <div style={{ maxHeight: 240, overflowY: 'auto', marginBottom: 20, padding: 2, border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-md)', background: 'var(--gray-50)' }}>
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 10 }}>
@@ -447,6 +385,68 @@ export default function AdminPage() {
                                                 </div>
                                             </div>
                                         )}
+
+                                        {/* 에듀테크 목록 — 아래로 */}
+                                        {(() => {
+                                            const swList = selectedClass.registrySoftwares || selectedClass.selectedSoftwares || [];
+                                            const hasPending = swList.some(sw => !smcList.some(sm => smcMatch(sm.softwareName, sw.name)));
+                                            return (
+                                                <>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                        <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 0 }}>📱 에듀테크 목록 ({swList.length}개)</p>
+                                                        {hasPending && (
+                                                            <button className="btn btn-primary btn-sm" onClick={() => handleApproveAll(swList)}>
+                                                                🚀 미승인 항목 일괄 승인
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {swList.length === 0 ? (
+                                                        <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem', marginBottom: 16 }}>등록된 소프트웨어 없음</p>
+                                                    ) : (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, maxHeight: 420, overflowY: 'auto', paddingRight: 4 }}>
+                                                            {swList.map(sw => {
+                                                                const approved = smcList.some(sm => smcMatch(sm.softwareName, sw.name));
+                                                                return (
+                                                                    <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 12, overflow: 'hidden', background: 'white' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: approved ? '#f1f8f1' : '#fff9f0' }}>
+                                                                            <span style={{ fontSize: '1.1rem' }}>{approved ? '✅' : '⚠️'}</span>
+                                                                            <span style={{ fontWeight: 700, flex: 1 }}>{sw.name}</span>
+                                                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                                                {sw.url && <a href={sw.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>사이트 ↗</a>}
+                                                                                {sw.privacyUrl && <a href={sw.privacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: '0.82rem' }}>약관 ↗</a>}
+                                                                                {!approved && (
+                                                                                    <button className="btn btn-primary btn-sm"
+                                                                                        style={{ height: 26, padding: '0 8px', fontSize: '0.75rem' }}
+                                                                                        onClick={(e) => { e.stopPropagation(); handleManualApprove(sw.name); }}>
+                                                                                        승인 처리
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        {(sw.collectionUseConsent || sw.thirdPartyConsent) && (
+                                                                            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'white', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                                                {sw.collectionUseConsent && (
+                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
+                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 수집·이용 동의`, body: sw.collectionUseConsent! })}>
+                                                                                        📋 수집이용동의 내용
+                                                                                    </button>
+                                                                                )}
+                                                                                {sw.thirdPartyConsent && (
+                                                                                    <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.75rem' }}
+                                                                                        onClick={() => setConsentModal({ title: `${sw.name} – 제3자 제공 동의`, body: sw.thirdPartyConsent! })}>
+                                                                                        📋 제3자제공동의 내용
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                 )}
                             </div>
