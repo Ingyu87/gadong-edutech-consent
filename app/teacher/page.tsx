@@ -318,13 +318,15 @@ export default function TeacherPage() {
                                     <input ref={csvFileRef} type="file" accept=".csv" className="form-control"
                                         style={{ padding: 8, flex: 1 }} onChange={handleCsvUpload} />
                                     {csvData.length > 0 && (
-                                        <button className="btn btn-primary" style={{ flexShrink: 0, padding: '0 24px' }} onClick={handleSaveCsv}>
-                                            🚀 {csvData.length}개 등록하기
-                                        </button>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <button className="btn btn-primary" style={{ flexShrink: 0, padding: '0 24px' }} onClick={handleSaveCsv}>
+                                                🚀 {csvData.length}개 등록(추출됨)
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                                 <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: 8 }}>
-                                    💡 파일을 선택하면 아래에 미리보기 목록이 나타납니다. 확인 후 <b>[등록하기]</b>를 클릭하세요.
+                                    💡 <b>추출 {csvData.length}개</b> 중 중복된 이름을 제외하고 <b>신규 항목만</b> 등록됩니다.
                                 </p>
                             </div>
                         </div>
@@ -332,7 +334,13 @@ export default function TeacherPage() {
                         {/* Current Registry List (Show if no CSV preview) */}
                         {allSoftwares.length > 0 && csvData.length === 0 && (
                             <div className="card">
-                                <p className="card-title">✅ 현재 등록된 에듀테크 ({allSoftwares.length}개)</p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 }}>
+                                    <p className="card-title" style={{ margin: 0 }}>✅ 현재 등록된 에듀테크 ({allSoftwares.length}개)</p>
+                                    <div style={{ textAlign: 'right', fontSize: '0.82rem', color: 'var(--gray-500)' }}>
+                                        심의 완료: <span style={{ color: 'var(--success)', fontWeight: 700 }}>{allSoftwares.filter(isSmcApproved).length}</span>개 ·
+                                        심의 확인 필요: <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{allSoftwares.filter(s => !isSmcApproved(s)).length}</span>개
+                                    </div>
+                                </div>
                                 <div className="table-wrapper">
                                     <table>
                                         <thead><tr><th>에듀테크명</th><th>심의여부</th><th>사용연령</th><th>링크</th></tr></thead>
