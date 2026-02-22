@@ -317,7 +317,7 @@ export default function TeacherPage() {
                                                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                                                 {item.collectionUseConsent && (
                                                                     <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: '0.78rem' }}
-                                                                        onClick={() => setConsentModal({ title: `${item.name} – 수집·이용 동의`, body: item.collectionUseConsent })}>
+                                                                        onClick={() => setConsentModal({ title: `${item.name} – 수집·이용 동의`, body: item.collectionUseConsent ?? '' })}>
                                                                         📋 수집이용동의 내용 보기
                                                                     </button>
                                                                 )}
