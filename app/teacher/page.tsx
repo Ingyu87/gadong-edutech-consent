@@ -4,10 +4,12 @@ import { useEffect, useState, useRef, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { getClass, getSmcRecords, getConsents, upsertClass } from '@/lib/db';
 import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { collection, getDocs, doc, setDoc, writeBatch } from 'firebase/firestore';
 import QRCode from 'qrcode';
 import Papa from 'papaparse';
+import { generateFamilyLetterDocx } from '@/lib/docx-utils';
 
 type Tab = 'csv' | 'qr' | 'monitor';
 
@@ -31,6 +33,8 @@ export default function TeacherPage() {
     const [csvData, setCsvData] = useState<SoftwareItem[]>([]);
     const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
     const csvFileRef = useRef<HTMLInputElement>(null);
+    const noticeFileRef = useRef<HTMLInputElement>(null);
+    const [uploadingNotice, setUploadingNotice] = useState(false);
 
     /** 구 형식(boolean) 응답을 ConsentResponse로 정규화 */
     const normalizeResp = (r: ConsentRecord['responses'][string]): ConsentResponse => {
@@ -225,6 +229,61 @@ export default function TeacherPage() {
         setAllSoftwares([]);
         setSelected([]);
         alert('우리 반 등록 목록 삭제 완료!');
+    };
+
+    const handleNoticeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !classConfig) return;
+
+        setUploadingNotice(true);
+        try {
+            const path = `notices/${classConfig.id}_${Date.now()}_${file.name}`;
+            const sRef = storageRef(storage, path);
+            await uploadBytes(sRef, file);
+            const url = await getDownloadURL(sRef);
+
+            const updated = { ...classConfig, noticeUrl: url, noticeName: file.name };
+            await upsertClass(updated, classConfig.id);
+            setClassConfig(updated);
+            alert('가정통신문 파일이 업로드되었습니다.');
+        } catch (err) {
+            console.error(err);
+            alert('파일 업로드에 실패했습니다.');
+        } finally {
+            setUploadingNotice(false);
+            if (noticeFileRef.current) noticeFileRef.current.value = '';
+        }
+    };
+
+    const handleDeleteNotice = async () => {
+        if (!classConfig || !classConfig.noticeUrl) return;
+        if (!confirm('업로드된 가정통신문 파일을 삭제하시겠습니까?')) return;
+
+        try {
+            // Firestore update first
+            const updated = { ...classConfig, noticeUrl: undefined, noticeName: undefined };
+            await upsertClass(updated, classConfig.id);
+            setClassConfig(updated);
+            alert('파일 정보가 삭제되었습니다.');
+        } catch (err) {
+            alert('삭제에 실패했습니다.');
+        }
+    };
+
+    const handleDownloadDocx = async () => {
+        if (!classConfig || !qrDataUrl) return;
+        try {
+            await generateFamilyLetterDocx({
+                schoolName: schoolName.replace('초등학교', '').trim(),
+                year: classConfig.year,
+                classNum: classConfig.classNum,
+                teacherName: classConfig.teacherName,
+                qrDataUrl: qrDataUrl
+            });
+        } catch (err) {
+            console.error(err);
+            alert('Docx 생성 중 오류가 발생했습니다.');
+        }
     };
 
     const logout = () => { sessionStorage.removeItem('teacherAuth'); sessionStorage.removeItem('classId'); router.push('/role'); };
@@ -568,7 +627,7 @@ export default function TeacherPage() {
                         <div style={{ background: 'var(--gray-100)', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, wordBreak: 'break-all', fontSize: '0.82rem', color: 'var(--gray-700)' }}>
                             {parentUrl}
                         </div>
-                        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 24 }}>
                             <button className="btn btn-outline" onClick={() => { navigator.clipboard.writeText(parentUrl); alert('링크가 복사되었습니다!'); }}>
                                 📋 링크 복사
                             </button>
@@ -576,6 +635,38 @@ export default function TeacherPage() {
                                 <a href={qrDataUrl} download={`QR_${classConfig.year}학년${classConfig.classNum}반.png`} className="btn btn-primary">
                                     ⬇️ QR 저장
                                 </a>
+                            )}
+                        </div>
+
+                        <div className="card" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)' }}>
+                            <p className="card-title" style={{ color: 'var(--primary)', justifyContent: 'center' }}>📄 가정통신문 안내</p>
+                            <p style={{ fontSize: '0.85rem', marginBottom: 16 }}>
+                                학부모님께 배부할 가정통신문을 준비하세요.
+                            </p>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                                <div className="card" style={{ padding: 12, background: 'white' }}>
+                                    <p style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 8 }}>1. 자동 생성 (권장)</p>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginBottom: 12 }}>학년/반과 QR 코드가 <br />자동 삽입된 파일을 다운로드합니다.</p>
+                                    <button className="btn btn-primary btn-sm btn-block" onClick={handleDownloadDocx}>
+                                        📝 Docx 다운로드
+                                    </button>
+                                </div>
+                                <div className="card" style={{ padding: 12, background: 'white' }}>
+                                    <p style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 8 }}>2. 직접 파일 탑재</p>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginBottom: 12 }}>이미 작성된 한글/PDF 파일이 <br />있다면 직접 업로드하세요.</p>
+                                    <input type="file" ref={noticeFileRef} style={{ display: 'none' }} onChange={handleNoticeUpload} accept=".hwp,.pdf,.docx,.doc" />
+                                    <button className="btn btn-outline btn-sm btn-block" onClick={() => noticeFileRef.current?.click()} disabled={uploadingNotice}>
+                                        {uploadingNotice ? '업로드 중...' : '📁 파일 업로드'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {classConfig.noticeUrl && (
+                                <div style={{ background: 'white', padding: '10px 14px', borderRadius: 8, border: '1px dashed var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--primary)' }}>📎 {classConfig.noticeName}</span>
+                                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', height: 24, padding: '0 4px' }} onClick={handleDeleteNotice}>삭제</button>
+                                </div>
                             )}
                         </div>
                     </div>
