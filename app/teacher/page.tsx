@@ -450,13 +450,14 @@ export default function TeacherPage() {
                                         {consents.sort((a, b) => a.studentNumber - b.studentNumber).map(c => {
                                             const isExpanded = expandedStudentId === c.id;
                                             const swList = classConfig.registrySoftwares || classConfig.selectedSoftwares || [];
-                                            let agreedSlots = 0;
+                                            let collAgreed = 0;
+                                            let thirdAgreed = 0;
                                             swList.forEach(sw => {
                                                 const r = normalizeResp(c.responses[sw.id]);
-                                                if (r.collectionUse === true) agreedSlots++;
-                                                if (r.thirdParty === true) agreedSlots++;
+                                                if (r.collectionUse === true) collAgreed++;
+                                                if (r.thirdParty === true) thirdAgreed++;
                                             });
-                                            const totalSlots = swList.length * 2;
+                                            const total = swList.length;
 
                                             return (
                                                 <Fragment key={c.id}>
@@ -473,8 +474,8 @@ export default function TeacherPage() {
                                                             </span>
                                                         </td>
                                                         <td style={{ textAlign: 'center' }}>
-                                                            <span className="badge badge-smc" style={{ fontSize: '0.75rem' }}>
-                                                                {agreedSlots} / {totalSlots} 동의
+                                                            <span className="badge badge-smc" style={{ fontSize: '0.75rem', padding: '4px 10px' }}>
+                                                                수집: {collAgreed}/{total} · 제공: {thirdAgreed}/{total}
                                                             </span>
                                                         </td>
                                                         <td style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--gray-400)' }}>

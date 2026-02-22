@@ -382,15 +382,15 @@ export default function AdminPage() {
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 10 }}>
                                                         {(selectedClass.registrySoftwares || selectedClass.selectedSoftwares || []).map(sw => {
                                                             const withR = classConsents.map(c => ({ c, r: normalizeResp(c.responses[sw.id]) }));
-                                                            const agreeAll = withR.filter(({ r }) => r.collectionUse === true && r.thirdParty === true);
+                                                            const agreeBoth = withR.filter(({ r }) => r.collectionUse === true && r.thirdParty === true);
                                                             const anyDisagree = withR.filter(({ r }) => r.collectionUse === false || r.thirdParty === false);
                                                             const pending = withR.filter(({ r }) => r.collectionUse == null || r.thirdParty == null);
                                                             return (
                                                                 <div key={sw.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 180, background: 'white' }}>
                                                                     <p style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 6 }}>{sw.name}</p>
                                                                     <div style={{ fontSize: '0.8rem', lineHeight: 1.9 }}>
-                                                                        <span style={{ color: '#2e7d32' }}>✅ 전체 동의 {agreeAll.length}명</span><br />
-                                                                        <span style={{ color: 'var(--danger)' }}>❌ 비동의 {anyDisagree.length}명</span>
+                                                                        <span style={{ color: '#2e7d32' }}>✅ 수집·제공 모두 동의 {agreeBoth.length}명</span><br />
+                                                                        <span style={{ color: 'var(--danger)' }}>❌ 비동의(하나라도) {anyDisagree.length}명</span>
                                                                         {anyDisagree.length > 0 && <span style={{ color: 'var(--danger)', fontSize: '0.75rem' }}> ({anyDisagree.slice(0, 3).map(({ c }) => maskName(c.studentName)).join(', ')}{anyDisagree.length > 3 ? '…' : ''})</span>}
                                                                         <br />
                                                                         <span style={{ color: 'var(--gray-400)' }}>— 미응답 {pending.length}명</span>
@@ -414,13 +414,14 @@ export default function AdminPage() {
                                                             {[...classConsents].sort((a, b) => a.studentNumber - b.studentNumber).map(c => {
                                                                 const isExpanded = expandedStudentId === c.id;
                                                                 const swList = selectedClass.registrySoftwares || selectedClass.selectedSoftwares || [];
-                                                                let agreedSlots = 0;
+                                                                let collAgreed = 0;
+                                                                let thirdAgreed = 0;
                                                                 swList.forEach(sw => {
                                                                     const r = normalizeResp(c.responses[sw.id]);
-                                                                    if (r.collectionUse === true) agreedSlots++;
-                                                                    if (r.thirdParty === true) agreedSlots++;
+                                                                    if (r.collectionUse === true) collAgreed++;
+                                                                    if (r.thirdParty === true) thirdAgreed++;
                                                                 });
-                                                                const totalSlots = swList.length * 2;
+                                                                const total = swList.length;
 
                                                                 return (
                                                                     <Fragment key={c.id}>
@@ -436,9 +437,9 @@ export default function AdminPage() {
                                                                                     {c.confirmationCode || '—'}
                                                                                 </span>
                                                                             </td>
-                                                                            <td>
-                                                                                <span className="badge badge-smc" style={{ fontSize: '0.75rem' }}>
-                                                                                    {agreedSlots} / {totalSlots} 동의
+                                                                            <td style={{ textAlign: 'center' }}>
+                                                                                <span className="badge badge-smc" style={{ fontSize: '0.75rem', padding: '4px 10px' }}>
+                                                                                    수집: {collAgreed}/{total} · 제공: {thirdAgreed}/{total}
                                                                                 </span>
                                                                             </td>
                                                                         </tr>
