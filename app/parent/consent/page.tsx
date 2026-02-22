@@ -253,18 +253,9 @@ export default function ParentConsentPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                         <div style={{ flex: 1 }}>
                             <p style={{ fontWeight: 700, fontSize: '1rem' }}>{classConfig.year}학년 {classConfig.classNum}반 개인정보 동의서</p>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                                <p style={{ fontSize: '0.85rem', color: 'var(--gray-400)' }}>
-                                    {get('parentNumber')}번 {get('parentStudentName')} · 학부모 {get('parentName')}
-                                </p>
-                                {classConfig.noticeUrl && (
-                                    <a href={classConfig.noticeUrl} target="_blank" rel="noopener noreferrer"
-                                        className="btn btn-ghost btn-sm"
-                                        style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.78rem', background: 'var(--primary-light)', padding: '2px 8px' }}>
-                                        📄 가정통신문 보기
-                                    </a>
-                                )}
-                            </div>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--gray-400)', marginTop: 4 }}>
+                                {get('parentNumber')}번 {get('parentStudentName')} · 학부모 {get('parentName')}
+                            </p>
                         </div>
                         <div style={{ textAlign: 'right', fontSize: '0.82rem', color: 'var(--gray-500)' }}>
                             에듀테크 {N}개 · 수집·이용 {collectionUseAnswered}/{N}, 제3자 {thirdPartyAnswered}/{N} 응답

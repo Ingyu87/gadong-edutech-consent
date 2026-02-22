@@ -85,13 +85,6 @@ export async function upsertClass(classData: Omit<ClassConfig, 'id'>, classId: s
     await setDoc(doc(db, 'classes', classId), classData, { merge: true });
 }
 
-export async function removeNoticeFields(classId: string): Promise<void> {
-    await updateDoc(doc(db, 'classes', classId), {
-        noticeUrl: deleteField(),
-        noticeName: deleteField(),
-    });
-}
-
 // --- Consent Records ---
 export async function getConsents(classId: string): Promise<ConsentRecord[]> {
     const q = query(collection(db, 'consents'), where('classId', '==', classId));

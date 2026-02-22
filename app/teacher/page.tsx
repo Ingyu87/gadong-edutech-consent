@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
-import { getClass, getSmcRecords, getConsents, upsertClass, removeNoticeFields } from '@/lib/db';
+import { getClass, getSmcRecords, getConsents, upsertClass } from '@/lib/db';
 import { ClassConfig, SmcRecord, SoftwareItem, ConsentRecord, ConsentResponse } from '@/lib/types';
 import { db, storage } from '@/lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -33,8 +33,6 @@ export default function TeacherPage() {
     const [csvData, setCsvData] = useState<SoftwareItem[]>([]);
     const [consentModal, setConsentModal] = useState<{ title: string; body: string } | null>(null);
     const csvFileRef = useRef<HTMLInputElement>(null);
-    const noticeFileRef = useRef<HTMLInputElement>(null);
-    const [uploadingNotice, setUploadingNotice] = useState(false);
 
     /** 구 형식(boolean) 응답을 ConsentResponse로 정규화 */
     const normalizeResp = (r: ConsentRecord['responses'][string]): ConsentResponse => {
@@ -229,48 +227,6 @@ export default function TeacherPage() {
         setAllSoftwares([]);
         setSelected([]);
         alert('우리 반 등록 목록 삭제 완료!');
-    };
-
-    const handleNoticeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !classConfig) return;
-
-        setUploadingNotice(true);
-        try {
-            const path = `notices/${classConfig.id}_${Date.now()}_${file.name}`;
-            const sRef = storageRef(storage, path);
-            await uploadBytes(sRef, file);
-            const url = await getDownloadURL(sRef);
-
-            const updated = { ...classConfig, noticeUrl: url, noticeName: file.name };
-            await upsertClass(updated, classConfig.id);
-            setClassConfig(updated);
-            alert('가정통신문 파일이 업로드되었습니다.');
-        } catch (err) {
-            console.error(err);
-            alert('파일 업로드에 실패했습니다.');
-        } finally {
-            setUploadingNotice(false);
-            if (noticeFileRef.current) noticeFileRef.current.value = '';
-        }
-    };
-
-    const handleDeleteNotice = async () => {
-        if (!classConfig || !classConfig.noticeUrl) return;
-        if (!confirm('업로드된 가정통신문 파일을 삭제하시겠습니까?')) return;
-
-        try {
-            const { removeNoticeFields } = await import('@/lib/db');
-            await removeNoticeFields(classConfig.id);
-            const updated = { ...classConfig };
-            delete updated.noticeUrl;
-            delete updated.noticeName;
-            setClassConfig(updated);
-            alert('파일 정보가 삭제되었습니다.');
-        } catch (err) {
-            console.error(err);
-            alert('삭제에 실패했습니다.');
-        }
     };
 
     const handleDownloadDocx = async () => {
@@ -644,33 +600,13 @@ export default function TeacherPage() {
                         <div className="card" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)' }}>
                             <p className="card-title" style={{ color: 'var(--primary)', justifyContent: 'center' }}>📄 가정통신문 안내</p>
                             <p style={{ fontSize: '0.85rem', marginBottom: 16 }}>
-                                학부모님께 배부할 가정통신문을 준비하세요.
+                                학부모님께 배부할 가정통신문(Docx)을 다운로드하세요. <br />
+                                학교 사정에 따라 학년, 반, 번호 또는 문구를 자유롭게 수정하여 인쇄하시면 됩니다.
                             </p>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                                <div className="card" style={{ padding: 12, background: 'white' }}>
-                                    <p style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 8 }}>1. 자동 생성 (권장)</p>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginBottom: 12 }}>학년/반과 QR 코드가 <br />자동 삽입된 파일을 다운로드합니다.</p>
-                                    <button className="btn btn-primary btn-sm btn-block" onClick={handleDownloadDocx}>
-                                        📝 Docx 다운로드
-                                    </button>
-                                </div>
-                                <div className="card" style={{ padding: 12, background: 'white' }}>
-                                    <p style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 8 }}>2. 직접 파일 탑재</p>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginBottom: 12 }}>이미 작성된 한글/PDF 파일이 <br />있다면 직접 업로드하세요.</p>
-                                    <input type="file" ref={noticeFileRef} style={{ display: 'none' }} onChange={handleNoticeUpload} accept=".hwp,.pdf,.docx,.doc" />
-                                    <button className="btn btn-outline btn-sm btn-block" onClick={() => noticeFileRef.current?.click()} disabled={uploadingNotice}>
-                                        {uploadingNotice ? '업로드 중...' : '📁 파일 업로드'}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {classConfig.noticeUrl && (
-                                <div style={{ background: 'white', padding: '10px 14px', borderRadius: 8, border: '1px dashed var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--primary)' }}>📎 {classConfig.noticeName}</span>
-                                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', height: 24, padding: '0 4px' }} onClick={handleDeleteNotice}>삭제</button>
-                                </div>
-                            )}
+                            <button className="btn btn-primary btn-block" onClick={handleDownloadDocx}>
+                                📝 가정통신문(Docx) 다운로드
+                            </button>
                         </div>
                     </div>
                 )}

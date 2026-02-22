@@ -27,8 +27,6 @@ export interface ClassConfig {
     selectedSoftwares: SoftwareItem[];
     teacherNote?: string;
     registrySoftwares?: SoftwareItem[];
-    noticeUrl?: string;
-    noticeName?: string;
 }
 
 export interface SoftwareItem {
