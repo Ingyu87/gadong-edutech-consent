@@ -247,10 +247,10 @@ export default function ParentConsentPage() {
                                     </span>
                                     <div style={{ display: 'flex', gap: 8 }}>
                                         <button
-                                            className={`consent-btn ${resp === true ? 'active' : ''}`}
+                                            className={`consent-btn consent-btn-agree ${resp === true ? 'active' : ''}`}
                                             onClick={() => handleAgree(sw.id, true)}>동의</button>
                                         <button
-                                            className={`consent-btn ${resp === false ? 'active' : ''}`}
+                                            className={`consent-btn consent-btn-disagree ${resp === false ? 'active' : ''}`}
                                             onClick={() => handleAgree(sw.id, false)}>비동의</button>
                                     </div>
                                 </div>
